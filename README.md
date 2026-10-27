@@ -55,19 +55,24 @@ iOS 能力预计通过可选的 `libimobiledevice` / `ideviceinstaller` 工具�
 ```text
 mobiletoolbox/
 ├─ apps/
-│  └─ app/                    # Vue 应用 + Tauri 外壳
-│     ├─ src/
-│     │  ├─ platform/native.ts    # 所有 Tauri command 的唯一入口
-│     │  ├─ stores/               # 应用 / 安装包 / 设备状态
-│     │  ├─ App.vue
-│     │  └─ main.ts
-│     └─ src-tauri/
-│        ├─ src/                  # Rust 后端
-│        ├─ resources/tools/      # 内置工具链
-│        └─ tauri.conf.json
+│  ├─ app/                    # Vue 应用 + Tauri 外壳
+│  │  ├─ src/
+│  │  │  ├─ platform/native.ts    # 所有 Tauri command 的唯一入口
+│  │  │  ├─ stores/               # 应用 / 安装包 / 设备状态
+│  │  │  ├─ features/updater/     # 应用内更新状态与弹窗
+│  │  │  ├─ App.vue
+│  │  │  └─ main.ts
+│  │  └─ src-tauri/
+│  │     ├─ src/                  # Rust 后端
+│  │     ├─ native/               # 各平台图标生成脚本与说明
+│  │     ├─ resources/tools/      # 内置工具链
+│  │     └─ tauri.conf.json
+│  └─ icon/                   # 统一图标源图与 Tauri 图标清单
 ├─ packages/
 │  ├─ protocol/               # 前后端共享类型、常量、格式化函数
 │  └─ ui/                     # 无原生依赖的展示组件
+├─ scripts/                   # 图标、版本与发版脚本
+├─ .github/workflows/         # Release 构建与 updater 清单发布
 ├─ package.json
 └─ pnpm-workspace.yaml
 ```
@@ -107,7 +112,65 @@ pnpm build
 pnpm build:web
 ```
 
-`pnpm dev` 会先构建 `@mobiletoolbox/protocol`，然后运行 `tauri dev`。
+`pnpm dev` 会先构建 `@mobiletoolbox/protocol`，然后运行 `tauri dev`。Tauri 开发与打包前会调用 `native/sync-icons.cjs` 生成当前平台图标；`build.rs` 也会在直接执行 `cargo build/check` 时做同样的事。
+
+### 图标生成
+
+源图与 Tauri 图标清单位于 `apps/icon/`（`icon.png` + `icons.json`）。图标按平台生成到 `apps/app/src-tauri/native/<平台>/icons/`，这些输出不纳入 Git。
+
+```bash
+# 刷新全部桌面平台图标和窗口 favicon
+pnpm sync:icons
+
+# 只生成某个平台（在 apps/app/src-tauri 下执行）
+node native/windows/sync-icons.cjs
+node native/macos/sync-icons.cjs
+node native/linux/sync-icons.cjs
+```
+
+生成缓存位于 `.tmp/native-icons/`；源图或脚本变化后会自动重新生成。详细说明见 [apps/app/src-tauri/native/README.md](apps/app/src-tauri/native/README.md)。
+
+## 应用内更新
+
+桌面端通过 `tauri-plugin-updater` 从 GitHub Release 的 `updater` 标签检查更新：
+
+- 启动后静默检查，发现新版本时弹出更新对话框，可查看更新说明、下载进度并重启生效。
+- 设置页的「应用更新」卡片可手动检查，并显示当前状态。
+- 更新清单地址为 `https://github.com/while-coder/MobileToolbox/releases/download/updater/latest.json`，公钥写在 `tauri.conf.json` 的 `plugins.updater` 中。
+
+本地生成签名密钥（私钥不要提交）：
+
+```bash
+cd apps/app
+pnpm tauri signer generate -w ~/.tauri/mobiletoolbox.key
+```
+
+把私钥内容写入仓库 Secrets 的 `TAURI_SIGNING_PRIVATE_KEY`（无密码时 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` 留空），并使用生成的公钥替换 `tauri.conf.json` 中的 `pubkey`。也可以在 `BUILD_SIGNING_JSON` 中提供同名的 JSON 字段。
+
+## 发版
+
+```bash
+# 升级 patch / minor / major 版本并推送 tag
+pnpm release patch
+pnpm release minor
+pnpm release major
+
+# 使用指定版本
+pnpm release 0.2.0
+
+# 只同步各包版本到根 package.json（不提交）
+pnpm sync:versions
+```
+
+`pnpm release` 会统一根目录、各 workspace 包与应用 Rust 的版本，提交后创建并推送 `vX.Y.Z` tag。运行前需要工作区干净；已有 tag 会在确认后删除重建。`.github/workflows/release.yml` 随后：
+
+1. 从 `package.json` 与 `CHANGELOG.md` 解析版本和发布说明，重建 GitHub Release；
+2. 在 Windows / macOS / Linux 上构建安装包并上传；
+3. 生成并发布 `updater/latest.json`，供应用内更新使用。
+
+发布流程复用 `while-coder/workflows` 的桌面构建与更新清单工作流。本地保留 ui-kit 的 `link:` 依赖；CI 通过两个包的 `ciDependencies` 字段切换到 GitHub 固定版本，无需相邻的 ui-kit 工作区。
+
+`CHANGELOG.md` 中的版本标题必须与版本号完全一致（例如 `## 0.2.0`），否则 Release notes 会回退为默认文案。
 
 ## 调试
 

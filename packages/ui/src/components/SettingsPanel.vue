@@ -19,12 +19,21 @@ const props = withDefaults(defineProps<{
   environment: EnvironmentInfo | null
   packagesCount: number
   loading: boolean
-}>(), { loading: false })
+  updateStatus: "idle" | "checking" | "latest" | "available" | "downloading" | "installed" | "error"
+  updateStatusText: string
+  updaterSupported: boolean
+}>(), {
+  loading: false,
+  updateStatus: "idle",
+  updateStatusText: "",
+  updaterSupported: false,
+})
 
 const emit = defineEmits<{
   refresh: []
   "open-workdir": []
   "clear-all": []
+  "check-update": []
 }>()
 
 interface ToolRow {
@@ -51,6 +60,14 @@ const adbDescription = computed(() => {
   const adb = props.environment?.adb
   if (!adb) return "检测中"
   return adb.available ? adb.path ?? "可用" : "缺失"
+})
+
+const updateButtonLabel = computed(() => {
+  if (!props.updaterSupported) return "当前平台不支持"
+  if (props.updateStatus === "checking") return "检查中…"
+  if (props.updateStatus === "downloading") return "下载中…"
+  if (props.updateStatus === "installed") return "重启生效"
+  return "检查更新"
 })
 </script>
 
@@ -136,6 +153,29 @@ const adbDescription = computed(() => {
             清空全部安装包
           </SButton>
         </div>
+      </section>
+
+      <section class="settings-card">
+        <header class="card-head">
+          <div class="card-title"><RefreshCw :size="15" /> 应用更新</div>
+          <SButton
+            size="small"
+            :loading="updateStatus === 'checking'"
+            :disabled="!updaterSupported || updateStatus === 'checking' || updateStatus === 'downloading'"
+            @click="emit('check-update')"
+          >
+            <RefreshCw v-if="updateStatus !== 'checking'" :size="13" />
+            {{ updateButtonLabel }}
+          </SButton>
+        </header>
+        <p
+          class="card-note update-note"
+          :class="{ 'is-error': updateStatus === 'error' }"
+          role="status"
+          aria-live="polite"
+        >
+          {{ updateStatusText }}
+        </p>
       </section>
 
       <section class="settings-card about-card">
@@ -250,6 +290,12 @@ const adbDescription = computed(() => {
   color: var(--apk-faint);
   font-size: 10.5px;
   line-height: 1.65;
+}
+.update-note {
+  margin-top: 0;
+}
+.update-note.is-error {
+  color: #fda4af;
 }
 .tool-list {
   display: flex;

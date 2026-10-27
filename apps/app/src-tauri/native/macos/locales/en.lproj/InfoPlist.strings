@@ -1,0 +1,2 @@
+"CFBundleDisplayName" = "MobileToolbox";
+"NSLocalNetworkUsageDescription" = "MobileToolbox needs access to your local network to connect to Android devices using adb.";

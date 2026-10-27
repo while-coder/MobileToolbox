@@ -1,12 +1,12 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "MobileToolbox",
-  "version": "0.1.0",
+  "version": "../../../package.json",
   "identifier": "com.whilecode.mobiletoolbox",
   "build": {
-    "beforeDevCommand": "pnpm --filter @mobiletoolbox/protocol build && pnpm --filter @mobiletoolbox/app dev",
+    "beforeDevCommand": "node src-tauri/native/sync-icons.cjs && pnpm --filter @mobiletoolbox/protocol build && pnpm --filter @mobiletoolbox/app dev",
     "devUrl": "http://localhost:1431",
-    "beforeBuildCommand": "pnpm --filter @mobiletoolbox/protocol build && pnpm --filter @mobiletoolbox/app build",
+    "beforeBuildCommand": "node src-tauri/native/sync-icons.cjs && pnpm --filter @mobiletoolbox/protocol build && pnpm --filter @mobiletoolbox/app build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -31,19 +31,32 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "publisher": "while",
+    "createUpdaterArtifacts": true,
+    "targets": ["nsis", "app", "dmg", "deb", "appimage"],
     "category": "DeveloperTool",
     "shortDescription": "移动应用与设备工具箱",
     "longDescription": "MobileToolbox 可以解析 APK 清单与权限、解包资源、生成 JAR、反编译 Java 源码，并通过 adb 安装到真机或模拟器。全部处理都在本机完成。",
     "icon": [
-      "icons/32x32.png",
-      "icons/128x128.png",
-      "icons/128x128@2x.png",
-      "icons/icon.icns",
-      "icons/icon.ico"
+      "../../icon/icon.png"
     ],
+    "windows": {
+      "nsis": {
+        "installMode": "both",
+        "languages": ["SimpChinese", "English", "TradChinese"],
+        "displayLanguageSelector": true
+      }
+    },
     "resources": [
       "resources/tools/**/*"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDA3OUJBMkZDQjc4OTgyQUYKUldTdmdvbTMvS0tiQjZpak40MHdSbWd1UHRvbWZSNDdEOFZmc1dGL2R5MkdrK01ZandiT3BiMmIK",
+      "endpoints": [
+        "https://github.com/while-coder/MobileToolbox/releases/download/updater/latest.json"
+      ]
+    }
   }
 }

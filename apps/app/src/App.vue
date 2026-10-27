@@ -19,6 +19,8 @@ import LogConsole from "@mobiletoolbox/ui/log"
 import type { ViewId } from "@mobiletoolbox/ui/types"
 import { native } from "./platform/native"
 import { errorText } from "./utils/errors"
+import UpdaterDialog from "./features/updater/UpdaterDialog.vue"
+import { useTauriUpdater } from "./features/updater/useTauriUpdater"
 import {
   activeView,
   clearLogs,
@@ -84,6 +86,9 @@ const views: Record<ViewId, { title: string; subtitle: string }> = {
 const pageTitle = computed(() => views[activeView.value].title)
 const pageSubtitle = computed(() => views[activeView.value].subtitle)
 const appVersion = computed(() => environment.value?.appVersion ?? "0.1.0")
+
+const updater = useTauriUpdater()
+const { updateStatus, updateStatusText, updaterSupported, checkForUpdate } = updater
 
 /** 导入任务在拿到安装包 id 之前只有文件名，因此用 id 为空来识别。 */
 const importTask = computed(() => runningList.value.find((task) => task.id === null) ?? null)
@@ -411,15 +416,21 @@ onBeforeUnmount(() => {
         :environment="environment"
         :packages-count="packages.length"
         :loading="environmentLoading"
+        :update-status="updateStatus"
+        :update-status-text="updateStatusText"
+        :updater-supported="updaterSupported"
         @refresh="loadEnvironment"
         @open-workdir="openWorkDir"
         @clear-all="clearAll"
+        @check-update="updateStatus === 'installed' ? updater.relaunchApp() : checkForUpdate({ silent: false })"
       />
 
       <template #footer>
         <LogConsole :lines="logs" :tasks="runningList" @clear="clearLogs" />
       </template>
     </AppShell>
+
+    <UpdaterDialog v-if="native.isTauri" :current-version="appVersion" />
 
     <Transition name="drop">
       <div v-if="dragActive" class="drop-overlay">

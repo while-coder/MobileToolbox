@@ -10,6 +10,9 @@
     "dev:web": "pnpm --filter @mobiletoolbox/protocol build && pnpm --filter @mobiletoolbox/app dev",
     "build": "pnpm --filter @mobiletoolbox/protocol build && pnpm --filter @mobiletoolbox/app tauri build",
     "build:web": "pnpm --filter @mobiletoolbox/protocol build && pnpm --filter @mobiletoolbox/app build",
+    "release": "node scripts/release.js",
+    "sync:versions": "node scripts/sync-versions.js",
+    "sync:icons": "node scripts/sync-icons.js",
     "check": "pnpm --filter @mobiletoolbox/protocol build && pnpm -r check"
   }
 }

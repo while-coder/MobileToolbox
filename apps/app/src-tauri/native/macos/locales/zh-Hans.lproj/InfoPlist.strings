@@ -1,0 +1,2 @@
+"CFBundleDisplayName" = "MobileToolbox";
+"NSLocalNetworkUsageDescription" = "MobileToolbox 需要访问本地网络，以通过 adb 连接 Android 设备。";

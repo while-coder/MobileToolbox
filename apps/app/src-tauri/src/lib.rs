@@ -53,8 +53,15 @@ fn resolve_tools_dir(app: &tauri::AppHandle) -> PathBuf {
 }
 
 pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_dialog::init())
+    let builder = tauri::Builder::default().plugin(tauri_plugin_dialog::init());
+
+    // 应用内更新与重启只在桌面端注册。
+    #[cfg(desktop)]
+    let builder = builder
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build());
+
+    builder
         .setup(|app| {
             let base = app
                 .path()
