@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ResizeHandle from "./ResizeHandle.vue"
 import { computed, ref, watch } from "vue"
 import {
   Cable,
@@ -112,6 +113,7 @@ function submitUninstall(): void {
 <template>
   <div class="devices-page">
     <aside class="device-column">
+      <ResizeHandle label="调整 ADB 设备列表宽度" :min="260" />
       <header class="column-head">
         <div class="column-title">
           <Smartphone :size="15" />
@@ -293,13 +295,16 @@ function submitUninstall(): void {
 
 <style scoped>
 .devices-page {
+  --pane-size: initial;
   display: grid;
   height: 100%;
   min-height: 0;
-  grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+  grid-template-columns: var(--pane-size, minmax(300px, 360px)) minmax(0, 1fr);
   overflow: hidden;
 }
 .device-column {
+  position: relative;
+  min-width: 0;
   display: flex;
   min-height: 0;
   flex-direction: column;
@@ -642,7 +647,7 @@ function submitUninstall(): void {
 }
 @media (max-width: 1000px) {
   .devices-page {
-    grid-template-columns: minmax(270px, 320px) minmax(0, 1fr);
+    grid-template-columns: var(--pane-size, minmax(270px, 320px)) minmax(0, 1fr);
   }
 }
 </style>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue"
+import ResizeHandle from "./ResizeHandle.vue"
+import { computed, onBeforeUnmount, onMounted, ref } from "vue"
 import {
   AlertCircle,
   ChevronRight,
@@ -12,6 +13,7 @@ import {
   FolderTree,
   Image as ImageIcon,
   RefreshCw,
+  Search,
 } from "lucide-vue-next"
 import {
   formatBytes,
@@ -45,6 +47,9 @@ const loadingDirs = ref<Set<string>>(new Set())
 const rootLoading = ref(true)
 const rootError = ref("")
 const rootTruncated = ref(false)
+const query = ref("")
+const searchTerm = computed(() => query.value.trim().toLowerCase())
+let directoryGeneration = 0
 
 const activeFile = ref<FileEntry | null>(null)
 const previewState = ref<"empty" | "loading" | "text" | "image" | "binary" | "error">("empty")
@@ -62,11 +67,14 @@ function errorText(error: unknown): string {
 
 function flatten(entries: FileEntry[], depth: number, output: Row[]): void {
   for (const entry of entries) {
-    output.push({ entry, depth })
-    if (entry.directory && expanded.value.has(entry.relativePath)) {
-      const nested = children.value[entry.relativePath]
-      if (nested) flatten(nested, depth + 1, output)
+    const nested: Row[] = []
+    const loaded = children.value[entry.relativePath]
+    if (entry.directory && loaded && expanded.value.has(entry.relativePath)) {
+      flatten(loaded, depth + 1, nested)
     }
+    if (searchTerm.value && !entry.relativePath.toLowerCase().includes(searchTerm.value) && nested.length === 0) continue
+    output.push({ entry, depth })
+    for (const row of nested) output.push(row)
   }
 }
 
@@ -91,20 +99,24 @@ async function loadRoot(): Promise<void> {
 }
 
 async function loadDirectory(relativePath: string): Promise<void> {
+  const generation = directoryGeneration
   const pending = new Set(loadingDirs.value)
   pending.add(relativePath)
   loadingDirs.value = pending
   try {
     const listing = await props.loadDirectory(props.root, relativePath)
+    if (generation !== directoryGeneration) return
     children.value = { ...children.value, [relativePath]: listing.entries }
     if (listing.truncated) toast.show("warning", "目录条目过多，仅显示前 2000 项")
   } catch (error) {
-    children.value = { ...children.value, [relativePath]: [] }
+    if (generation !== directoryGeneration) return
     toast.show("error", `读取目录失败：${errorText(error)}`)
   } finally {
-    const next = new Set(loadingDirs.value)
-    next.delete(relativePath)
-    loadingDirs.value = next
+    if (generation === directoryGeneration) {
+      const next = new Set(loadingDirs.value)
+      next.delete(relativePath)
+      loadingDirs.value = next
+    }
   }
 }
 
@@ -212,6 +224,8 @@ function iconFor(entry: FileEntry | null) {
 }
 
 async function refresh(): Promise<void> {
+  ++directoryGeneration
+  loadingDirs.value = new Set()
   children.value = {}
   expanded.value = new Set()
   activeFile.value = null
@@ -224,6 +238,7 @@ async function refresh(): Promise<void> {
 onMounted(() => {
   void loadRoot()
 })
+onBeforeUnmount(() => { ++directoryGeneration })
 </script>
 
 <template>
@@ -244,40 +259,50 @@ onMounted(() => {
     </header>
 
     <div class="fb-body">
-      <div class="tree-pane">
-        <div v-if="rootLoading" class="tree-state">
-          <span class="apk-spinner" />
-          正在读取目录…
+      <div class="tree-column">
+        <ResizeHandle label="调整文件目录宽度" :min="160" :remaining="200" />
+        <div class="tree-search">
+          <Search :size="14" aria-hidden="true" />
+          <SInput v-model:value="query" size="small" clearable class="tree-search-input"
+            aria-label="过滤文件名或路径" placeholder="过滤文件名或路径…" />
         </div>
-        <div v-else-if="rootError" class="tree-state error">
-          <AlertCircle :size="18" />
-          <span>{{ rootError }}</span>
-          <SButton size="small" @click="loadRoot">重试</SButton>
+        <div class="tree-pane">
+          <div v-if="rootLoading" class="tree-state">
+            <span class="apk-spinner" />
+            正在读取目录…
+          </div>
+          <div v-else-if="rootError" class="tree-state error">
+            <AlertCircle :size="18" />
+            <span>{{ rootError }}</span>
+            <SButton size="small" @click="loadRoot">重试</SButton>
+          </div>
+          <div v-else-if="rows.length === 0" class="tree-state">
+            {{ searchTerm ? '没有匹配的文件或目录' : '目录为空' }}
+          </div>
+          <template v-else>
+            <div v-if="rootTruncated" class="tree-notice">条目过多，仅显示前 2000 项</div>
+            <button
+              v-for="row in rows"
+              :key="row.entry.relativePath"
+              type="button"
+              class="tree-row"
+              :class="{ selected: isSelected(row.entry), directory: row.entry.directory }"
+              :style="{ paddingLeft: `${8 + row.depth * 14}px` }"
+              :title="row.entry.relativePath"
+              @click="onEntryClick(row.entry)"
+            >
+              <span class="chevron" :class="{ open: row.entry.directory && isExpanded(row.entry) }">
+                <ChevronRight v-if="row.entry.directory" :size="12" />
+              </span>
+              <component :is="iconFor(row.entry)" :size="14" class="entry-icon" />
+              <span class="entry-name">{{ row.entry.name }}</span>
+              <span v-if="loadingDirs.has(row.entry.relativePath)" class="apk-spinner tiny" />
+              <span v-else-if="!row.entry.directory" class="entry-size">{{ formatBytes(row.entry.size) }}</span>
+            </button>
+          </template>
         </div>
-        <div v-else-if="rows.length === 0" class="tree-state">目录为空</div>
-        <template v-else>
-          <div v-if="rootTruncated" class="tree-notice">条目过多，仅显示前 2000 项</div>
-          <button
-            v-for="row in rows"
-            :key="row.entry.relativePath"
-            type="button"
-            class="tree-row"
-            :class="{ selected: isSelected(row.entry), directory: row.entry.directory }"
-            :style="{ paddingLeft: `${8 + row.depth * 14}px` }"
-            :title="row.entry.relativePath"
-            @click="onEntryClick(row.entry)"
-          >
-            <span class="chevron" :class="{ open: row.entry.directory && isExpanded(row.entry) }">
-              <ChevronRight v-if="row.entry.directory" :size="12" />
-            </span>
-            <component :is="iconFor(row.entry)" :size="14" class="entry-icon" />
-            <span class="entry-name">{{ row.entry.name }}</span>
-            <span v-if="loadingDirs.has(row.entry.relativePath)" class="apk-spinner tiny" />
-            <span v-else-if="!row.entry.directory" class="entry-size">{{ formatBytes(row.entry.size) }}</span>
-          </button>
-        </template>
-      </div>
 
+      </div>
       <div class="preview-pane">
         <header v-if="activeFile" class="preview-head">
           <component :is="iconFor(activeFile)" :size="15" class="entry-icon" />
@@ -358,11 +383,31 @@ onMounted(() => {
   flex: 1;
 }
 .fb-body {
+  --pane-size: initial;
   display: grid;
   min-height: 0;
-  grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
+  grid-template-columns: var(--pane-size, minmax(220px, 320px)) minmax(0, 1fr);
 }
+.tree-column {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+}
+.tree-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border-right: 1px solid var(--apk-border);
+  border-bottom: 1px solid var(--apk-border);
+  color: var(--apk-muted);
+}
+.tree-search > svg { flex: 0 0 auto; }
+.tree-search-input { min-width: 0; flex: 1; }
 .tree-pane {
+  height: 100%;
   position: relative;
   min-height: 0;
   overflow: auto;
@@ -580,7 +625,7 @@ onMounted(() => {
 }
 @media (max-width: 900px) {
   .fb-body {
-    grid-template-columns: minmax(180px, 44%) minmax(0, 1fr);
+    grid-template-columns: var(--pane-size, minmax(180px, 44%)) minmax(0, 1fr);
   }
 }
 </style>

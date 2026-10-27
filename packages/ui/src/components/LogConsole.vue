@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ResizeHandle from "./ResizeHandle.vue"
 import { computed, nextTick, onMounted, ref, watch } from "vue"
 import {
   ArrowDownToLine,
@@ -145,6 +146,7 @@ async function copyLogs(): Promise<void> {
 
 <template>
   <section class="log-console" :class="{ expanded, maximized }">
+    <ResizeHandle v-if="expanded && !maximized" label="调整日志高度" horizontal :min="140" :max="1200" />
     <header class="log-bar" :title="expanded ? '收起运行日志' : '展开运行日志'" @click="toggle">
       <div class="bar-title">
         <Terminal :size="13" />
@@ -285,6 +287,7 @@ async function copyLogs(): Promise<void> {
  * 由 AppShell 的 footer-dock 提供定位上下文，因此不会挤压主内容。
  */
 .log-console {
+  --pane-size: initial;
   position: absolute;
   right: 0;
   bottom: 0;
@@ -296,10 +299,10 @@ async function copyLogs(): Promise<void> {
   border-top: 1px solid var(--apk-border);
   background: #07101d;
   box-shadow: 0 -14px 34px rgba(2, 8, 18, 0.36);
-  transition: height 0.16s ease;
+
 }
 .log-console.expanded {
-  height: 320px;
+  height: min(var(--pane-size, 320px), calc(100vh - 80px));
 }
 .log-console.maximized {
   height: 72vh;

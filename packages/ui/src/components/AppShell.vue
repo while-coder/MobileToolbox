@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ResizeHandle from "./ResizeHandle.vue"
 import { computed } from "vue"
 import { PackageSearch, Settings2, Smartphone } from "lucide-vue-next"
 import type { ViewId } from "../types"
@@ -32,6 +33,7 @@ const navItems = computed(() => [
 <template>
   <div class="shell">
     <aside class="sidebar">
+      <ResizeHandle label="调整菜单宽度" :min="72" :max="360" :remaining="600" />
       <div class="brand">
         <div class="brand-mark" aria-hidden="true">
           <svg viewBox="0 0 32 32" fill="none">
@@ -102,10 +104,11 @@ const navItems = computed(() => [
 
 <style scoped>
 .shell {
+  --pane-size: initial;
   display: grid;
   width: 100%;
   height: 100%;
-  grid-template-columns: 216px minmax(0, 1fr);
+  grid-template-columns: var(--pane-size, 216px) minmax(0, 1fr);
   background:
     radial-gradient(circle at 12% -12%, rgba(56, 189, 248, 0.12), transparent 34%),
     radial-gradient(circle at 92% 8%, rgba(167, 139, 250, 0.09), transparent 30%),
@@ -113,6 +116,9 @@ const navItems = computed(() => [
 }
 
 .sidebar {
+  position: relative;
+  min-width: 0;
+  container-type: inline-size;
   display: flex;
   min-height: 0;
   flex-direction: column;
@@ -324,11 +330,11 @@ const navItems = computed(() => [
 
 @media (max-width: 1080px) {
   .shell {
-    grid-template-columns: 72px minmax(0, 1fr);
+    grid-template-columns: var(--pane-size, 72px) minmax(0, 1fr);
   }
-  .sidebar {
-    padding: 18px 10px 12px;
-  }
+}
+
+@container (max-width: 120px) {
   .brand {
     justify-content: center;
     padding: 2px 0 20px;

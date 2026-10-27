@@ -6,6 +6,7 @@
   "exports": {
     "./styles.css": "./src/styles.css",
     "./types": "./src/types.ts",
+    "./resize-handle": "./src/components/ResizeHandle.vue",
     "./shell": "./src/components/AppShell.vue",
     "./package-icon": "./src/components/PackageIcon.vue",
     "./package-list": "./src/components/PackageList.vue",

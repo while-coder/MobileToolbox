@@ -10,6 +10,7 @@ import type {
   LoadText,
   PackageInfo,
 } from "@mobiletoolbox/protocol"
+import ResizeHandle from "@mobiletoolbox/ui/resize-handle"
 import AppShell from "@mobiletoolbox/ui/shell"
 import PackageList from "@mobiletoolbox/ui/package-list"
 import PackageDetails from "@mobiletoolbox/ui/package-details"
@@ -361,20 +362,23 @@ onBeforeUnmount(() => {
       </template>
 
       <div v-if="activeView === 'packages'" class="packages-layout">
-        <PackageList
-          :packages="packages"
-          :selected-id="selectedId"
-          :icons="icons"
-          :busy="busy"
-          :query="query"
-          :importing="importing"
-          :import-task="importTask"
-          @select="selectPackage"
-          @import="pickAndImport"
-          @delete="remove"
-          @reveal="reveal"
-          @update:query="handleQuery"
-        />
+        <div class="package-column">
+          <ResizeHandle label="调整安装包库宽度" :min="240" />
+          <PackageList
+            :packages="packages"
+            :selected-id="selectedId"
+            :icons="icons"
+            :busy="busy"
+            :query="query"
+            :importing="importing"
+            :import-task="importTask"
+            @select="selectPackage"
+            @import="pickAndImport"
+            @delete="remove"
+            @reveal="reveal"
+            @update:query="handleQuery"
+          />
+        </div>
         <PackageDetails
           :pkg="selectedPackage"
           :icon-url="iconFor(selectedId)"
@@ -453,10 +457,17 @@ onBeforeUnmount(() => {
 }
 
 .packages-layout {
+  --pane-size: initial;
   display: grid;
   height: 100%;
   min-height: 0;
-  grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+  grid-template-columns: var(--pane-size, minmax(300px, 360px)) minmax(0, 1fr);
+}
+
+.package-column {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
 }
 
 .drop-overlay {
@@ -515,7 +526,7 @@ onBeforeUnmount(() => {
 
 @media (max-width: 1080px) {
   .packages-layout {
-    grid-template-columns: minmax(270px, 320px) minmax(0, 1fr);
+    grid-template-columns: var(--pane-size, minmax(270px, 320px)) minmax(0, 1fr);
   }
 }
 </style>
