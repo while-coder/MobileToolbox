@@ -223,25 +223,17 @@ async function copyLogs(): Promise<void> {
           </button>
         </div>
 
-        <label class="search-wrap">
+        <div class="search-wrap">
           <Search class="search-icon" :size="12" />
-          <input
-            v-model="keyword"
-            class="search-input"
-            type="text"
+          <SInput
+            v-model:value="keyword"
+            size="small"
+            clearable
+            aria-label="筛选日志"
             placeholder="筛选日志…"
             spellcheck="false"
           />
-          <button
-            v-if="keyword"
-            type="button"
-            class="search-clear"
-            title="清除筛选"
-            @click="keyword = ''"
-          >
-            ×
-          </button>
-        </label>
+        </div>
 
         <span class="filtered-count">{{ filtered.length }} / {{ lines.length }}</span>
 
@@ -456,44 +448,10 @@ async function copyLogs(): Promise<void> {
   width: min(220px, 32%);
   align-items: center;
   gap: 5px;
-  padding: 0 7px;
-  border: 1px solid var(--apk-border);
-  border-radius: 6px;
-  background: rgba(4, 10, 20, 0.5);
-}
-.search-wrap:focus-within {
-  border-color: rgba(56, 189, 248, 0.4);
 }
 .search-icon {
   flex: 0 0 auto;
   color: var(--apk-faint);
-}
-.search-input {
-  width: 100%;
-  min-width: 0;
-  padding: 3px 0;
-  border: 0;
-  background: transparent;
-  color: var(--apk-text-soft);
-  font-family: var(--apk-font);
-  font-size: 10.5px;
-  outline: none;
-}
-.search-input::placeholder {
-  color: var(--apk-faint);
-}
-.search-clear {
-  flex: 0 0 auto;
-  padding: 0 1px;
-  border: 0;
-  background: transparent;
-  color: var(--apk-faint);
-  cursor: pointer;
-  font-size: 13px;
-  line-height: 1;
-}
-.search-clear:hover {
-  color: var(--apk-text);
 }
 .filtered-count {
   margin-left: auto;

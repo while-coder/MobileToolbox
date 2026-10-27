@@ -202,36 +202,35 @@ function requestInstall(): void {
             <div class="info-grid">
               <div class="info-card">
                 <div class="card-title"><Info :size="14" /> 基本信息</div>
-                <dl class="info-list">
-                  <div class="info-row"><dt>应用名称</dt><dd>{{ label }}</dd></div>
-                  <div class="info-row"><dt>包名</dt><dd class="apk-mono">{{ pkg.packageName || "-" }}</dd></div>
-                  <div class="info-row"><dt>版本名称</dt><dd class="apk-mono">{{ pkg.versionName || "-" }}</dd></div>
-                  <div class="info-row"><dt>版本号</dt><dd class="apk-mono">{{ pkg.versionCode || "-" }}</dd></div>
-                  <div class="info-row"><dt>最低支持</dt><dd>{{ androidLabel(pkg.minSdk) }}</dd></div>
-                  <div class="info-row"><dt>目标 SDK</dt><dd>{{ androidLabel(pkg.targetSdk) }}</dd></div>
-                  <div class="info-row"><dt>编译 SDK</dt><dd>{{ androidLabel(pkg.compileSdk) }}</dd></div>
-                  <div class="info-row"><dt>启动 Activity</dt><dd class="apk-mono">{{ pkg.launchableActivity || "-" }}</dd></div>
-                  <div class="info-row"><dt>安装位置</dt><dd>{{ pkg.installLocation || "-" }}</dd></div>
-                  <div class="info-row"><dt>原生架构</dt><dd>{{ pkg.nativeCode.length ? pkg.nativeCode.join(" · ") : "-" }}</dd></div>
-                </dl>
+                <SInfoTable class="info-table" label-width="104px">
+                  <SInfoRow label="应用名称">{{ label }}</SInfoRow>
+                  <SInfoRow label="包名" mono>{{ pkg.packageName || "-" }}</SInfoRow>
+                  <SInfoRow label="版本名称" mono>{{ pkg.versionName || "-" }}</SInfoRow>
+                  <SInfoRow label="版本号" mono>{{ pkg.versionCode || "-" }}</SInfoRow>
+                  <SInfoRow label="最低支持">{{ androidLabel(pkg.minSdk) }}</SInfoRow>
+                  <SInfoRow label="目标 SDK">{{ androidLabel(pkg.targetSdk) }}</SInfoRow>
+                  <SInfoRow label="编译 SDK">{{ androidLabel(pkg.compileSdk) }}</SInfoRow>
+                  <SInfoRow label="启动 Activity" mono>{{ pkg.launchableActivity || "-" }}</SInfoRow>
+                  <SInfoRow label="安装位置">{{ pkg.installLocation || "-" }}</SInfoRow>
+                  <SInfoRow label="原生架构">{{ pkg.nativeCode.length ? pkg.nativeCode.join(" · ") : "-" }}</SInfoRow>
+                </SInfoTable>
               </div>
 
               <div class="info-card">
                 <div class="card-title"><HardDriveDownload :size="14" /> 文件与指纹</div>
-                <dl class="info-list">
-                  <div class="info-row"><dt>文件</dt><dd>{{ pkg.fileName }}</dd></div>
-                  <div class="info-row"><dt>大小</dt><dd>{{ formatBytes(pkg.sizeBytes) }}</dd></div>
-                  <div class="info-row"><dt>导入时间</dt><dd>{{ formatDateTime(pkg.importedAt) }}</dd></div>
-                  <div class="info-row">
-                    <dt>SHA-256</dt>
-                    <dd class="apk-mono hash">
+                <SInfoTable class="info-table" label-width="104px">
+                  <SInfoRow label="文件">{{ pkg.fileName }}</SInfoRow>
+                  <SInfoRow label="大小">{{ formatBytes(pkg.sizeBytes) }}</SInfoRow>
+                  <SInfoRow label="导入时间">{{ formatDateTime(pkg.importedAt) }}</SInfoRow>
+                  <SInfoRow label="SHA-256" mono>
+                    <div class="hash">
                       <span>{{ pkg.sha256 }}</span>
                       <SIconButton size="22" variant="ghost" title="复制 SHA-256" @click="copyValue(pkg.sha256, 'SHA-256 ')">
                         <Copy :size="12" />
                       </SIconButton>
-                    </dd>
-                  </div>
-                </dl>
+                    </div>
+                  </SInfoRow>
+                </SInfoTable>
               </div>
 
               <div class="info-card actions-card">
@@ -554,32 +553,11 @@ function requestInstall(): void {
   font-size: 10px;
   font-weight: 400;
 }
-.info-list {
-  display: flex;
-  margin: 0;
-  flex-direction: column;
-}
-.info-row {
-  display: flex;
-  min-height: 30px;
-  align-items: center;
-  gap: 12px;
-  padding: 5px 0;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.075);
+.info-table {
+  table-layout: fixed;
   font-size: 11.5px;
 }
-.info-row:last-child {
-  border-bottom: 0;
-}
-.info-row dt {
-  width: 92px;
-  flex: 0 0 auto;
-  color: var(--apk-faint);
-}
-.info-row dd {
-  min-width: 0;
-  flex: 1;
-  margin: 0;
+.info-table :deep(.s-info-row-value) {
   overflow-wrap: anywhere;
   color: var(--apk-text-soft);
 }

@@ -129,7 +129,7 @@ async function dismiss() {
         <p v-if="updateTotal" class="updater-download-size">{{ formatBytes(updateDownloaded) }} / {{ formatBytes(updateTotal) }}</p>
       </div>
 
-      <p v-if="updateStatus === 'error'" class="updater-error" role="alert">{{ updateErrorText }}</p>
+      <SAlert v-if="updateStatus === 'error'" type="error" class="updater-error" show-icon>{{ updateErrorText }}</SAlert>
     </div>
 
     <template #footer>
@@ -181,7 +181,7 @@ async function dismiss() {
 .updater-progress-fill { height: 100%; border-radius: inherit; background: var(--sui-primary); transform-origin: left; transition: transform 200ms ease; }
 .updater-progress.is-indeterminate .updater-progress-fill { width: 35%; animation: updater-progress 1.4s ease-in-out infinite; }
 .updater-download-size { margin: 8px 0 0; font-size: 12px; color: var(--sui-fg-muted); text-align: right; font-variant-numeric: tabular-nums; }
-.updater-error { margin: 0; padding: 12px 14px; border: 1px solid var(--sui-border); border-left: 3px solid var(--sui-error); border-radius: 6px; background: var(--sui-bg-subtle); color: var(--sui-error); overflow-wrap: anywhere; }
+.updater-error { overflow-wrap: anywhere; }
 @keyframes updater-progress { from { transform: translateX(-100%); } to { transform: translateX(390%); } }
 @media (prefers-reduced-motion: reduce) { .updater-progress-fill { transition: none; } .updater-progress.is-indeterminate .updater-progress-fill { animation: none; } }
 </style>

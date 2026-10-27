@@ -8,7 +8,6 @@ import {
   HardDrive,
   Info,
   RefreshCw,
-  ShieldAlert,
   Smartphone,
   Terminal,
   Wrench,
@@ -133,10 +132,9 @@ const updateButtonLabel = computed(() => {
           </div>
         </div>
 
-        <div v-if="environment && !javaReady" class="alert-line">
-          <ShieldAlert :size="14" />
+        <SAlert v-if="environment && !javaReady" class="tool-alert" type="warning" show-icon>
           <span>未检测到 Java。请安装 JDK 11 或更高版本，并确保 <span class="apk-mono">java</span> 在 PATH 中；否则无法解包和反编译。</span>
-        </div>
+        </SAlert>
         <div v-else-if="environment" class="hint-line">
           内置工具位于 <span class="apk-mono">{{ environment.toolsDir }}</span>；当前使用的 adb：<span class="apk-mono">{{ adbDescription }}</span>
         </div>
@@ -168,9 +166,12 @@ const updateButtonLabel = computed(() => {
             {{ updateButtonLabel }}
           </SButton>
         </header>
+        <SAlert v-if="updateStatus === 'error'" type="error" show-icon>
+          {{ updateStatusText }}
+        </SAlert>
         <p
+          v-else
           class="card-note update-note"
-          :class="{ 'is-error': updateStatus === 'error' }"
           role="status"
           aria-live="polite"
         >
@@ -294,9 +295,6 @@ const updateButtonLabel = computed(() => {
 .update-note {
   margin-top: 0;
 }
-.update-note.is-error {
-  color: #fda4af;
-}
 .tool-list {
   display: flex;
   flex-direction: column;
@@ -362,7 +360,6 @@ const updateButtonLabel = computed(() => {
   color: var(--apk-muted);
   font-size: 11.5px;
 }
-.alert-line,
 .hint-line {
   display: flex;
   align-items: flex-start;
@@ -373,21 +370,14 @@ const updateButtonLabel = computed(() => {
   font-size: 10.5px;
   line-height: 1.6;
 }
-.alert-line {
-  border: 1px solid rgba(251, 113, 133, 0.25);
-  background: rgba(251, 113, 133, 0.07);
-  color: #fda4af;
-}
-.alert-line svg {
-  flex: 0 0 auto;
-  margin-top: 1px;
+.tool-alert {
+  margin-top: 10px;
 }
 .hint-line {
   border: 1px solid var(--apk-border);
   background: rgba(148, 163, 184, 0.035);
   color: var(--apk-muted);
 }
-.alert-line .apk-mono,
 .hint-line .apk-mono {
   color: inherit;
 }
