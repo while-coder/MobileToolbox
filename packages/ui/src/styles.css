@@ -1,0 +1,178 @@
+@import "@qingfeng346/ui-kit/style.css";
+
+/* ─────────────────────────────────────────────────────────────
+ * MobileToolbox 视觉层
+ * 深色「分析台」风格：冷蓝底 + 青色强调，局部用紫罗兰区分源码视图。
+ * 这里只放全局 token / 基类和极少量工具类，组件样式都在各自 SFC 内。
+ * ───────────────────────────────────────────────────────────── */
+
+:root {
+  --apk-bg: #070d18;
+  --apk-bg-glow: #0b1a2e;
+  --apk-panel: #0f1a2b;
+  --apk-panel-strong: #142238;
+  --apk-panel-soft: #0c1626;
+  --apk-border: rgba(148, 163, 184, 0.14);
+  --apk-border-strong: rgba(148, 163, 184, 0.26);
+  --apk-accent: #38bdf8;
+  --apk-accent-strong: #0ea5e9;
+  --apk-accent-soft: rgba(56, 189, 248, 0.12);
+  --apk-violet: #a78bfa;
+  --apk-violet-soft: rgba(167, 139, 250, 0.12);
+  --apk-green: #34d399;
+  --apk-amber: #fbbf24;
+  --apk-red: #fb7185;
+  --apk-text: #e2e8f0;
+  --apk-text-soft: #cbd5e1;
+  --apk-muted: #8ba0b8;
+  --apk-faint: #64748b;
+  --apk-radius: 12px;
+  --apk-radius-sm: 8px;
+  --apk-mono: "Cascadia Code", "JetBrains Mono", "Fira Code", Consolas, "SFMono-Regular", monospace;
+  --apk-font: "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+}
+
+/* ui-kit 深色 token 与 MobileToolbox 调色板对齐 */
+:root[data-theme="dark"] {
+  --sui-bg: var(--apk-panel);
+  --sui-bg-page: var(--apk-bg);
+  --sui-bg-soft: var(--apk-panel-strong);
+  --sui-bg-subtle: var(--apk-panel-soft);
+  --sui-bg-hover: #1a2a42;
+  --sui-bg-active: #22344f;
+  --sui-fg: var(--apk-text);
+  --sui-fg-secondary: var(--apk-text-soft);
+  --sui-fg-muted: var(--apk-muted);
+  --sui-fg-disabled: var(--apk-faint);
+  --sui-border: var(--apk-border);
+  --sui-border-subtle: rgba(148, 163, 184, 0.08);
+  --sui-border-strong: var(--apk-border-strong);
+  --sui-primary: var(--apk-accent);
+  --sui-primary-hover: var(--apk-accent-strong);
+  --sui-on-primary: #04121f;
+  --sui-success: var(--apk-green);
+  --sui-warning: var(--apk-amber);
+  --sui-error: var(--apk-red);
+  --sui-info: var(--apk-accent);
+  --sui-info-soft: rgba(56, 189, 248, 0.12);
+  --sui-on-info-soft: #7dd3fc;
+  --sui-log-bg: #081120;
+  --sui-log-fg: #b9c9dc;
+  --sui-font-mono: var(--apk-mono);
+  --sui-radius-md: 8px;
+  --sui-radius-lg: 10px;
+  --sui-shadow-md: 0 12px 32px rgba(0, 0, 0, 0.32);
+  --sui-shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.48);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--apk-font);
+  color: var(--apk-text);
+  background: var(--apk-bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  color: inherit;
+}
+
+::selection {
+  background: rgba(56, 189, 248, 0.28);
+}
+
+/* 细滚动条，避免深色面板里出现系统亮色滚动条 */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.28);
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.46);
+  background-clip: content-box;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ── 共享工具类 ─────────────────────────────────────────── */
+.apk-mono {
+  font-family: var(--apk-mono);
+  font-variant-numeric: tabular-nums;
+}
+.apk-muted {
+  color: var(--apk-muted);
+}
+.apk-truncate {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.apk-panel {
+  border: 1px solid var(--apk-border);
+  border-radius: var(--apk-radius);
+  background: var(--apk-panel);
+}
+.apk-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 40px 24px;
+  color: var(--apk-muted);
+  text-align: center;
+}
+.apk-key {
+  color: var(--apk-muted);
+  font-size: 12px;
+}
+.apk-spinner {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: apk-spin 0.7s linear infinite;
+}
+@keyframes apk-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .apk-spinner {
+    animation-duration: 1.6s;
+  }
+}

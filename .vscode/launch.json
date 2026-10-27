@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Launch App · Windows",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/apps/app/src-tauri/target/debug/mobiletoolbox.exe",
+      "cwd": "${workspaceFolder}/apps/app/src-tauri",
+      "preLaunchTask": "tauri:before:dev"
+    },
+    {
+      "name": "Launch App · macOS",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/apps/app/src-tauri/target/debug/mobiletoolbox",
+      "cwd": "${workspaceFolder}/apps/app/src-tauri",
+      "preLaunchTask": "tauri:before:dev"
+    }
+  ]
+}

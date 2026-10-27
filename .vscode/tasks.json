@@ -1,0 +1,43 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "ui:kill",
+      "type": "process",
+      "command": "node",
+      "args": ["${workspaceFolder}/scripts/kill-port.js", "1431"],
+      "problemMatcher": []
+    },
+    {
+      "label": "debug:app",
+      "type": "shell",
+      "command": "pnpm run debug:app",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": ["$rustc"],
+      "presentation": { "reveal": "silent", "panel": "dedicated" }
+    },
+    {
+      "label": "ui:dev",
+      "type": "shell",
+      "isBackground": true,
+      "command": "pnpm",
+      "args": ["vite", "dev", "--port", "1431"],
+      "options": { "cwd": "${workspaceFolder}/apps/app" },
+      "problemMatcher": {
+        "owner": "vite",
+        "pattern": { "regexp": ".+" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".+",
+          "endsPattern": "Local.*1431"
+        }
+      },
+      "presentation": { "reveal": "always", "panel": "dedicated" }
+    },
+    {
+      "label": "tauri:before:dev",
+      "dependsOn": ["ui:kill", "debug:app", "ui:dev"],
+      "dependsOrder": "sequence"
+    }
+  ]
+}

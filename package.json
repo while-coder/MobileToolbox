@@ -1,0 +1,15 @@
+{
+  "name": "mobiletoolbox",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MobileToolbox - mobile app and device inspector desktop app",
+  "packageManager": "pnpm@10.30.3",
+  "scripts": {
+    "debug:app": "pnpm --filter @mobiletoolbox/protocol build && cargo build --manifest-path apps/app/src-tauri/Cargo.toml",
+    "dev": "pnpm --filter @mobiletoolbox/protocol build && pnpm --filter @mobiletoolbox/app tauri dev",
+    "dev:web": "pnpm --filter @mobiletoolbox/protocol build && pnpm --filter @mobiletoolbox/app dev",
+    "build": "pnpm --filter @mobiletoolbox/protocol build && pnpm --filter @mobiletoolbox/app tauri build",
+    "build:web": "pnpm --filter @mobiletoolbox/protocol build && pnpm --filter @mobiletoolbox/app build",
+    "check": "pnpm --filter @mobiletoolbox/protocol build && pnpm -r check"
+  }
+}
