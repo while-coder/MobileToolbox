@@ -1,4 +1,4 @@
-import type { AndroidDevice, InstalledApp } from "@mobiletoolbox/protocol"
+import type { AndroidDevice, DeviceFileEntry, InstalledApp } from "@mobiletoolbox/protocol"
 import { native, type CommandOptions, type CommandOutput } from "./native"
 
 function combined(output: CommandOutput): string {
@@ -82,10 +82,49 @@ async function install(deviceId: string, path: string): Promise<string> {
   if (/failure|error/i.test(output) || !/success/i.test(output)) throw new Error(`安装结果未确认成功：${output}`)
   return output
 }
+
+export function normalizeDevicePath(path: string): string {
+  if (!path.startsWith("/") || path.length > 4096 || path.includes("\0")) throw new Error("请输入有效的设备绝对路径")
+  const parts: string[] = []
+  for (const part of path.split("/")) {
+    if (part === "..") parts.pop()
+    else if (part && part !== ".") parts.push(part)
+  }
+  return `/${parts.join("/")}`
+}
+
+export function parseDeviceFiles(output: string): DeviceFileEntry[] {
+  return output.split("\0").filter(Boolean).map(record => {
+    const first = record.indexOf("\n")
+    const second = record.indexOf("\n", first + 1)
+    if (first < 0 || second < 0) throw new Error("无法解析设备目录信息")
+    const kind = record.slice(0, first).replace(/\r$/, "")
+    const metadata = record.slice(first + 1, second).replace(/\r$/, "").match(/^([\da-f]+) (\d+) (-?\d+)$/i)
+    const name = record.slice(second + 1)
+    if (!metadata || !["d", "f"].includes(kind) || !name || name.includes("/")) throw new Error("无法解析设备文件信息")
+    return { name, directory: kind === "d", symbolicLink: (parseInt(metadata[1], 16) & 0xf000) === 0xa000,
+      size: Number(metadata[2]), modifiedAt: Number(metadata[3]) * 1000 }
+  }).sort((a, b) => Number(b.directory) - Number(a.directory) || a.name.localeCompare(b.name, "zh-CN", { numeric: true }))
+}
+
+async function listFiles(deviceId: string, path: string): Promise<DeviceFileEntry[]> {
+  const normalized = normalizeDevicePath(path)
+  const quoted = `'${normalized.replace(/'/g, `'"'"'`)}'`
+  // NUL 分隔每个条目；文件名在最后，保留空格、中文与换行，不依赖 ls 的列对齐。
+  const script = `cd ${quoted} && for entry in .[!.]* ..?* *; do
+    [ -e "$entry" ] || [ -L "$entry" ] || continue
+    metadata=$(stat -c '%f %s %Y' -- "$entry") || exit 1
+    if [ -d "$entry" ]; then kind=d; else kind=f; fi
+    printf '%s\\n%s\\n%s\\0' "$kind" "$metadata" "$entry"
+  done`
+  const output = await command(deviceId, ["shell", "-T", script])
+  return parseDeviceFiles(output.stdout)
+}
 export const adb = {
   devices,
   installedApps,
   install,
+  listFiles,
   async connect(value: string): Promise<string> {
     address(value)
     const output = combined(await native.adbCommand(["connect", value]))

@@ -30,6 +30,7 @@ import {
 import { toast } from "@qingfeng346/ui-kit"
 import PackageIcon from "./PackageIcon.vue"
 import FileBrowser from "./FileBrowser.vue"
+import { permissionDescription } from "../androidPermissions"
 
 const props = withDefaults(defineProps<{
   pkg: PackageInfo | null
@@ -53,13 +54,11 @@ const emit = defineEmits<{
 
 const locale = typeof navigator === "undefined" ? "zh-CN" : navigator.language
 const tab = ref("overview")
-const permissionsExpanded = ref(false)
 
 watch(
   () => props.pkg?.id,
   () => {
     tab.value = "overview"
-    permissionsExpanded.value = false
   },
 )
 
@@ -77,16 +76,6 @@ const stageText = computed(() => {
 })
 
 const busy = computed(() => Boolean(stageText.value))
-const displayedPermissions = computed(() => {
-  const permissions = props.pkg?.permissions ?? []
-  return permissionsExpanded.value ? permissions : permissions.slice(0, 14)
-})
-
-function shortPermission(permission: string): string {
-  const index = permission.lastIndexOf(".")
-  return index >= 0 ? permission.slice(index + 1) : permission
-}
-
 function fallbackCopy(text: string): boolean {
   try {
     const area = document.createElement("textarea")
@@ -193,7 +182,7 @@ function requestInstall(): void {
       <div v-if="busy" class="stage-bar">
         <span class="apk-spinner" />
         <span>{{ stageText }}</span>
-        <span class="stage-hint">详细输出见底部运行日志</span>
+        <span class="stage-hint">正在后台处理</span>
       </div>
 
       <STabs v-model:value="tab" class="detail-tabs">
@@ -293,22 +282,12 @@ function requestInstall(): void {
                 <span class="permissions-note">来自 AndroidManifest.xml</span>
               </div>
               <div v-if="pkg.permissions.length === 0" class="permissions-empty">未声明额外权限</div>
-              <div v-else class="permission-cloud">
-                <STag
-                  v-for="permission in displayedPermissions"
-                  :key="permission"
-                  size="small"
-                  :title="permission"
-                >{{ shortPermission(permission) }}</STag>
-                <button
-                  v-if="pkg.permissions.length > 14"
-                  type="button"
-                  class="permission-toggle"
-                  @click="permissionsExpanded = !permissionsExpanded"
-                >
-                  {{ permissionsExpanded ? "收起" : `展开全部 ${pkg.permissions.length} 项` }}
-                </button>
-              </div>
+              <dl v-else class="permission-list" aria-label="安装包声明的权限及中文说明">
+                <div v-for="permission in pkg.permissions" :key="permission" class="permission-row">
+                  <dt class="permission-name apk-mono">{{ permission }}</dt>
+                  <dd class="permission-description">{{ permissionDescription(permission) }}</dd>
+                </div>
+              </dl>
             </div>
           </div>
         </STabPane>
@@ -361,11 +340,12 @@ function requestInstall(): void {
 
 <style scoped>
 .package-details {
-  display: grid;
+  display: flex;
   height: 100%;
   min-width: 0;
   min-height: 0;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  flex-direction: column;
+  overflow: hidden;
   background: rgba(8, 15, 27, 0.3);
 }
 
@@ -425,6 +405,7 @@ function requestInstall(): void {
 
 .detail-head {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 14px;
   padding: 16px 20px 14px;
@@ -482,6 +463,7 @@ function requestInstall(): void {
 }
 .stage-bar {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 8px;
   padding: 7px 20px;
@@ -500,8 +482,9 @@ function requestInstall(): void {
 }
 
 .detail-tabs {
+  flex: 1;
   min-height: 0;
-  height: 100%;
+  overflow: hidden;
 }
 .detail-tabs :deep(.s-tab-list) {
   padding: 0 12px;
@@ -515,6 +498,7 @@ function requestInstall(): void {
 }
 .detail-tabs :deep(.s-tab-pane) {
   overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 .tab-body {
   display: flex;
@@ -628,32 +612,36 @@ function requestInstall(): void {
   padding-top: 10px;
   border-top: 1px solid rgba(148, 163, 184, 0.09);
 }
-.permission-cloud {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+.permission-list {
+  margin: 0;
 }
-.permission-cloud :deep(.s-tag) {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.permission-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px 24px;
+  padding: 10px 0;
+  border-top: 1px solid var(--apk-border);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.permission-name {
+  color: var(--apk-text-soft);
+  overflow-wrap: anywhere;
+}
+.permission-description {
+  margin: 0;
+  color: var(--apk-muted);
+  overflow-wrap: anywhere;
 }
 .permissions-empty {
   padding: 4px 0;
   color: var(--apk-faint);
   font-size: 11.5px;
 }
-.permission-toggle {
-  padding: 2px 8px;
-  border: 1px dashed var(--apk-border-strong);
-  border-radius: 5px;
-  background: transparent;
-  color: var(--apk-accent);
-  cursor: pointer;
-  font-size: 10.5px;
-}
-.permission-toggle:hover {
-  background: rgba(56, 189, 248, 0.08);
+@media (max-width: 1100px) {
+  .permission-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .locked-pane {

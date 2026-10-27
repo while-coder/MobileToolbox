@@ -121,6 +121,14 @@ export interface InstalledApp {
   system: boolean;
 }
 
+export interface DeviceFileEntry {
+  name: string;
+  directory: boolean;
+  symbolicLink: boolean;
+  size: number;
+  modifiedAt: number;
+}
+
 export type FileKind = "text" | "image" | "binary";
 
 export interface FileEntry {

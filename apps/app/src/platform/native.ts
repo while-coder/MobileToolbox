@@ -1,6 +1,6 @@
-import { invoke } from "@tauri-apps/api/core"
+import { Channel, invoke } from "@tauri-apps/api/core"
 import { listen, type UnlistenFn } from "@tauri-apps/api/event"
-import { open } from "@tauri-apps/plugin-dialog"
+import { open, save } from "@tauri-apps/plugin-dialog"
 import type {
   BrowserRoot,
   DirectoryListing,
@@ -14,6 +14,7 @@ import type {
 
 export interface CommandOutput { stdout: string; stderr: string }
 export interface CommandOptions { stream?: boolean; source?: string; cwd?: string }
+export interface LogcatEvent { lines: string[]; finished: boolean; error: string | null }
 
 export const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
 
@@ -52,6 +53,17 @@ export const native = {
 
   runtimePaths: () => invoke<{ workDir: string; toolsDir: string }>("runtime_paths"),
   adbCommand: (args: string[], options: CommandOptions = {}) => invoke<CommandOutput>("adb_command", { args, ...options }),
+  startLogcat: (deviceId: string, sessionId: string, handler: (event: LogcatEvent) => void) => {
+    const onEvent = new Channel<LogcatEvent>()
+    onEvent.onmessage = handler
+    return invoke<string>("start_logcat", { deviceId, sessionId, onEvent })
+  },
+  stopLogcat: (sessionId: string) => invoke<void>("stop_logcat", { sessionId }),
+  exportLogcat: (path: string, text: string) => invoke<void>("export_logcat", { path, text }),
+  exportLogcatSession: (sessionId: string, path: string) => invoke<number>("export_logcat_session", { sessionId, path }),
+  openLogcatCache: () => invoke<void>("open_logcat_cache"),
+  clearLogcatCache: () => invoke<void>("clear_logcat_cache"),
+  pickLogcatFile: () => save({ defaultPath: `logcat-${Date.now()}.log`, filters: [{ name: "日志文件", extensions: ["log", "txt"] }] }),
   javaCommand: (args: string[], options: CommandOptions = {}) => invoke<CommandOutput>("java_command", { args, ...options }),
   packageFile: (id: string, action: "isFile" | "hasEntries" | "remove" | "rename", path: string, destination?: string) =>
     invoke<boolean>("package_file", { id, action, path, destination }),

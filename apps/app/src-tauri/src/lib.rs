@@ -1,5 +1,6 @@
 mod apk;
 mod commands;
+mod logcat;
 mod model;
 mod store;
 mod tools;
@@ -61,6 +62,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build());
 
     builder
+        .manage(logcat::LogcatState::default())
         .setup(|app| {
             let base = app
                 .path()
@@ -82,6 +84,12 @@ pub fn run() {
             commands::get_environment,
             commands::runtime_paths,
             commands::adb_command,
+            logcat::start_logcat,
+            logcat::stop_logcat,
+            logcat::export_logcat,
+            logcat::export_logcat_session,
+            logcat::open_logcat_cache,
+            logcat::clear_logcat_cache,
             commands::java_command,
             commands::package_file,
             commands::get_package_info,
@@ -97,6 +105,11 @@ pub fn run() {
             commands::reveal_package,
             commands::open_path,
         ])
-        .run(tauri::generate_context!())
-        .expect("MobileToolbox 启动失败");
+        .build(tauri::generate_context!())
+        .expect("MobileToolbox 启动失败")
+        .run(|app, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                app.state::<logcat::LogcatState>().stop();
+            }
+        });
 }

@@ -15,6 +15,7 @@ import {
 import type { EnvironmentInfo, ToolStatus } from "@mobiletoolbox/protocol"
 
 const props = withDefaults(defineProps<{
+  appVersion?: string
   environment: EnvironmentInfo | null
   packagesCount: number
   loading: boolean
@@ -22,11 +23,14 @@ const props = withDefaults(defineProps<{
   updateStatusText: string
   updaterSupported: boolean
 }>(), {
+  appVersion: "0.1.0",
   loading: false,
   updateStatus: "idle",
   updateStatusText: "",
   updaterSupported: false,
 })
+
+const activeTab = defineModel<string>("tab", { default: "environment" })
 
 const emit = defineEmits<{
   refresh: []
@@ -72,135 +76,165 @@ const updateButtonLabel = computed(() => {
 
 <template>
   <div class="settings-page">
-    <div class="settings-inner">
-      <section class="settings-hero">
-        <div class="hero-mark"><Wrench :size="22" :stroke-width="1.5" /></div>
-        <div>
-          <h2>环境与工作目录</h2>
-          <p>MobileToolbox 调用本地 Java、Android 构建工具和 adb 完成解析、解包、反编译与安装。</p>
-        </div>
-        <SButton size="small" :loading="loading" @click="emit('refresh')">
-          <RefreshCw v-if="!loading" :size="13" />
-          重新检测
-        </SButton>
-      </section>
-
-      <section class="settings-card">
-        <header class="card-head">
-          <div class="card-title"><FolderCog :size="15" /> 工作目录</div>
-          <SButton size="small" @click="emit('open-workdir')">
-            <FolderOpen :size="13" />
-            打开目录
-          </SButton>
-        </header>
-        <div class="path-box apk-mono">{{ environment?.workDir || "检测中…" }}</div>
-        <p class="card-note">每个安装包按「文件名-Hash」独立存放，包含原始 APK、解包资源、source.jar 与 Java 源码。</p>
-      </section>
-
-      <section class="settings-card">
-        <header class="card-head">
-          <div class="card-title"><Terminal :size="15" /> 工具链</div>
-          <span class="ready-count">{{ readyCount }} / {{ tools.length }} 就绪</span>
-        </header>
-
-        <div v-if="!environment" class="tool-loading">
-          <span class="apk-spinner" />
-          正在检测工具链…
-        </div>
-
-        <div v-else class="tool-list">
-          <div v-for="tool in tools" :key="tool.key" class="tool-row">
-            <div class="tool-icon" :class="{ missing: !tool.status?.available }">
-              <Coffee v-if="tool.key === 'java'" :size="14" />
-              <Boxes v-else-if="tool.key === 'dex2jar' || tool.key === 'cfr'" :size="14" />
-              <Smartphone v-else-if="tool.key === 'adb'" :size="14" />
-              <Wrench v-else :size="14" />
+    <STabs v-model:value="activeTab" placement="left" class="settings-tabs">
+      <STabPane name="environment" tab="环境与工具">
+        <div class="settings-inner">
+          <section class="settings-hero">
+            <div class="hero-mark"><Wrench :size="22" :stroke-width="1.5" /></div>
+            <div>
+              <h2>环境与工作目录</h2>
+              <p>MobileToolbox 调用本地 Java、Android 构建工具和 adb 完成解析、解包、反编译与安装。</p>
             </div>
-            <div class="tool-main">
-              <div class="tool-name">
-                {{ tool.name }}
-                <span v-if="tool.status?.version" class="tool-version apk-mono">{{ tool.status.version }}</span>
-              </div>
-              <div class="tool-desc">{{ tool.description }}</div>
-              <div class="tool-path apk-mono" :title="tool.status?.path || undefined">
-                {{ tool.status?.available ? tool.status.path : tool.status?.detail || "未找到" }}
+            <SButton size="small" :loading="loading" @click="emit('refresh')">
+              <RefreshCw v-if="!loading" :size="13" />
+              重新检测
+            </SButton>
+          </section>
+
+          <section class="settings-card">
+            <header class="card-head">
+              <div class="card-title"><FolderCog :size="15" /> 工作目录</div>
+              <SButton size="small" @click="emit('open-workdir')">
+                <FolderOpen :size="13" />
+                打开目录
+              </SButton>
+            </header>
+            <div class="path-box apk-mono">{{ environment?.workDir || "检测中…" }}</div>
+            <p class="card-note">每个安装包按「文件名-Hash」独立存放，包含原始 APK、解包资源、source.jar 与 Java 源码。</p>
+          </section>
+
+          <section class="settings-card">
+            <header class="card-head">
+              <div class="card-title"><Terminal :size="15" /> 工具链</div>
+              <span class="ready-count">{{ readyCount }} / {{ tools.length }} 就绪</span>
+            </header>
+
+            <div v-if="!environment" class="tool-loading">
+              <span class="apk-spinner" />
+              正在检测工具链…
+            </div>
+
+            <div v-else class="tool-list">
+              <div v-for="tool in tools" :key="tool.key" class="tool-row">
+                <div class="tool-icon" :class="{ missing: !tool.status?.available }">
+                  <Coffee v-if="tool.key === 'java'" :size="14" />
+                  <Boxes v-else-if="tool.key === 'dex2jar' || tool.key === 'cfr'" :size="14" />
+                  <Smartphone v-else-if="tool.key === 'adb'" :size="14" />
+                  <Wrench v-else :size="14" />
+                </div>
+                <div class="tool-main">
+                  <div class="tool-name">
+                    {{ tool.name }}
+                    <span v-if="tool.status?.version" class="tool-version apk-mono">{{ tool.status.version }}</span>
+                  </div>
+                  <div class="tool-desc">{{ tool.description }}</div>
+                  <div class="tool-path apk-mono" :title="tool.status?.path || undefined">
+                    {{ tool.status?.available ? tool.status.path : tool.status?.detail || "未找到" }}
+                  </div>
+                </div>
+                <STag :type="tool.status?.available ? 'success' : 'error'" size="small" :bordered="false">
+                  {{ tool.status?.available ? "可用" : "缺失" }}
+                </STag>
               </div>
             </div>
-            <STag :type="tool.status?.available ? 'success' : 'error'" size="small" :bordered="false">
-              {{ tool.status?.available ? "可用" : "缺失" }}
-            </STag>
-          </div>
-        </div>
 
-        <SAlert v-if="environment && !javaReady" class="tool-alert" type="warning" show-icon>
-          <span>未检测到 Java。请安装 JDK 11 或更高版本，并确保 <span class="apk-mono">java</span> 在 PATH 中；否则无法解包和反编译。</span>
-        </SAlert>
-        <div v-else-if="environment" class="hint-line">
-          内置工具位于 <span class="apk-mono">{{ environment.toolsDir }}</span>；当前使用的 adb：<span class="apk-mono">{{ adbDescription }}</span>
+            <SAlert v-if="environment && !javaReady" class="tool-alert" type="warning" show-icon>
+              <span>未检测到 Java。请安装 JDK 11 或更高版本，并确保 <span class="apk-mono">java</span> 在 PATH 中；否则无法解包和反编译。</span>
+            </SAlert>
+            <div v-else-if="environment" class="hint-line">
+              内置工具位于 <span class="apk-mono">{{ environment.toolsDir }}</span>；当前使用的 adb：<span class="apk-mono">{{ adbDescription }}</span>
+            </div>
+          </section>
         </div>
-      </section>
-
-      <section class="settings-card danger-card">
-        <header class="card-head">
-          <div class="card-title"><HardDrive :size="15" /> 数据管理</div>
-          <STag size="small" :bordered="false">{{ packagesCount }} 个安装包</STag>
-        </header>
-        <p class="card-note">清空会删除安装包库索引及工作目录中的全部 APK、解包资源、JAR 和源码，操作不可撤销。</p>
-        <div class="danger-actions">
-          <SButton type="error" size="small" tertiary :disabled="packagesCount === 0" @click="emit('clear-all')">
-            清空全部安装包
-          </SButton>
+      </STabPane>
+      <STabPane name="data" tab="数据管理">
+        <div class="settings-inner">
+          <section class="settings-card danger-card">
+            <header class="card-head">
+              <div class="card-title"><HardDrive :size="15" /> 数据管理</div>
+              <STag size="small" :bordered="false">{{ packagesCount }} 个安装包</STag>
+            </header>
+            <p class="card-note">清空会删除安装包库索引及工作目录中的全部 APK、解包资源、JAR 和源码，操作不可撤销。</p>
+            <div class="danger-actions">
+              <SButton type="error" size="small" tertiary :disabled="packagesCount === 0" @click="emit('clear-all')">
+                清空全部安装包
+              </SButton>
+            </div>
+          </section>
         </div>
-      </section>
-
-      <section class="settings-card">
-        <header class="card-head">
-          <div class="card-title"><RefreshCw :size="15" /> 应用更新</div>
-          <SButton
-            size="small"
-            :loading="updateStatus === 'checking'"
-            :disabled="!updaterSupported || updateStatus === 'checking' || updateStatus === 'downloading'"
-            @click="emit('check-update')"
-          >
-            <RefreshCw v-if="updateStatus !== 'checking'" :size="13" />
-            {{ updateButtonLabel }}
-          </SButton>
-        </header>
-        <SAlert v-if="updateStatus === 'error'" type="error" show-icon>
-          {{ updateStatusText }}
-        </SAlert>
-        <p
-          v-else
-          class="card-note update-note"
-          role="status"
-          aria-live="polite"
-        >
-          {{ updateStatusText }}
-        </p>
-      </section>
-
-      <section class="settings-card about-card">
-        <header class="card-head">
-          <div class="card-title"><Info :size="15" /> 关于</div>
-          <STag size="small" :bordered="false">v{{ environment?.appVersion || "0.1.0" }}</STag>
-        </header>
-        <div class="about-grid">
-          <div><span class="k">应用</span><span class="v">MobileToolbox · 移动应用与设备工具箱</span></div>
-          <div><span class="k">平台</span><span class="v apk-mono">{{ environment?.platform || "-" }}</span></div>
-          <div><span class="k">解析</span><span class="v">内置 APK 解析器 / apktool / dex2jar / CFR</span></div>
-          <div><span class="k">设备</span><span class="v">系统 adb（缺失时使用内置版本）</span></div>
+      </STabPane>
+      <STabPane name="updates" tab="应用更新">
+        <div class="settings-inner">
+          <section class="settings-card">
+            <header class="card-head">
+              <div class="card-title"><RefreshCw :size="15" /> 应用更新</div>
+              <SButton
+                size="small"
+                :loading="updateStatus === 'checking'"
+                :disabled="!updaterSupported || updateStatus === 'checking' || updateStatus === 'downloading'"
+                @click="emit('check-update')"
+              >
+                <RefreshCw v-if="updateStatus !== 'checking'" :size="13" />
+                {{ updateButtonLabel }}
+              </SButton>
+            </header>
+            <SAlert v-if="updateStatus === 'error'" type="error" show-icon>
+              {{ updateStatusText }}
+            </SAlert>
+            <p
+              v-else
+              class="card-note update-note"
+              role="status"
+              aria-live="polite"
+            >
+              {{ updateStatusText }}
+            </p>
+          </section>
         </div>
-        <p class="card-note about-note">仅用于分析你有权处理的安装包。所有处理都在本机完成，不会上传任何文件。</p>
-      </section>
-    </div>
+      </STabPane>
+      <STabPane name="about" tab="关于">
+        <div class="settings-inner">
+          <section class="settings-card about-card">
+            <header class="card-head">
+              <div class="card-title"><Info :size="15" /> 关于</div>
+              <STag size="small" :bordered="false">v{{ appVersion }}</STag>
+            </header>
+            <div class="about-brand">
+              <img src="/mobiletoolbox-icon.png" alt="" />
+              <div><h2>MobileToolbox</h2><p>移动应用与设备工具箱</p></div>
+            </div>
+            <div class="about-grid">
+              <div><span class="k">应用</span><span class="v">MobileToolbox · 移动应用与设备工具箱</span></div>
+              <div><span class="k">作者</span><span class="v">whilecode</span></div>
+              <div><span class="k">应用标识</span><span class="v apk-mono">com.whilecode.mobiletoolbox</span></div>
+              <div><span class="k">平台</span><span class="v apk-mono">{{ environment?.platform || "-" }}</span></div>
+              <div><span class="k">解析</span><span class="v">内置 APK 解析器 / apktool / dex2jar / CFR</span></div>
+              <div><span class="k">设备</span><span class="v">系统 adb（缺失时使用内置版本）</span></div>
+            </div>
+            <p class="card-note about-note">APK 解析、资源解包、源码反编译与设备管理均在本机完成，不上传文件。</p>
+          </section>
+        </div>
+      </STabPane>
+    </STabs>
   </div>
 </template>
 
 <style scoped>
 .settings-page {
   height: 100%;
-  overflow-y: auto;
-  padding: 18px 20px 28px;
+  min-height: 0;
+  overflow: hidden;
+}
+.settings-tabs { height: 100%; min-height: 0; }
+.settings-tabs :deep(.s-tab-list) { flex: 0 0 116px; }
+.settings-tabs :deep(.s-tab-pane) { padding: 0 0 12px 18px; scrollbar-gutter: stable; }
+.about-brand { display: flex; align-items: center; gap: 16px; margin: 12px 0 24px; }
+.about-brand img { width: 64px; height: 64px; object-fit: contain; }
+.about-brand h2 { margin: 0; color: var(--apk-text); font-size: 22px; }
+.about-brand p { margin: 6px 0 0; color: var(--apk-muted); font-size: 12px; }
+@media (max-width: 720px) {
+  .settings-tabs :deep(.s-tab-list) { flex: 0 0 auto; }
+  .settings-tabs :deep(.s-tab-pane) { padding: 12px 0; }
 }
 .settings-inner {
   display: flex;

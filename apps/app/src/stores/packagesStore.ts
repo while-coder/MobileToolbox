@@ -4,7 +4,8 @@ import type { PackageInfo, PackageStage } from "@mobiletoolbox/protocol"
 import { native } from "../platform/native"
 import * as packageCommands from "../platform/packageCommands"
 import { errorText } from "../utils/errors"
-import { activeView, handleProgress, logLocal } from "./appStore"
+import { activeView, handleProgress } from "./appStore"
+import { log } from "../log"
 
 export const packages = ref<PackageInfo[]>([])
 export const selectedId = ref<string | null>(null)
@@ -117,10 +118,10 @@ export async function importFromPaths(paths: string[]): Promise<number> {
     for (const failure of outcome.errors) {
       toast.show("error", `${failure.file}：${failure.message}`, 7000)
     }
-    logLocal(
+    const writeLog = outcome.errors.length > 0 ? log.error : log.info
+    writeLog(
       "导入",
       `完成：成功 ${outcome.packages.length} 个，失败 ${outcome.errors.length} 个`,
-      outcome.errors.length > 0 ? "error" : "info",
     )
     return outcome.packages.length
   } catch (error) {

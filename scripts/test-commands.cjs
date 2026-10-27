@@ -17,6 +17,70 @@ function load(name, native) {
 }
 const output = (stdout = "", stderr = "") => ({ stdout, stderr });
 
+function logcatFixture() {
+  const watchers = [], calls = [];
+  let handler;
+  const device = { value: { id: "emulator-5554", state: "device" } };
+  const native = {
+    isTauri: true,
+    pickLogcatFile: async () => "capture.log",
+    startLogcat: async (...args) => { calls.push(["start", ...args.slice(0, 2)]); handler = args[2]; return "cache/session.log"; },
+    stopLogcat: async id => { calls.push(["stop", id]); handler({ lines: ["last buffered line"], finished: true }); },
+    exportLogcat: async (...args) => { calls.push(["export", ...args]); },
+    exportLogcatSession: async (...args) => { calls.push(["export-session", ...args]); return 100; },
+    clearLogcatCache: async () => { calls.push(["clear-cache"]); },
+  };
+  const source = fs.readFileSync(path.join(__dirname, "../apps/app/src/stores/logcatStore.ts"), "utf8");
+  const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const module = { exports: {} };
+  new Function("require", "module", "exports", code)(name => {
+    if (name === "vue") return { ref: value => ({ value }), watch: (...args) => watchers.push(args) };
+    if (name === "../platform/native") return { native };
+    if (name === "../utils/errors") return { errorText: String };
+    if (name === "./devicesStore") return { selectedDevice: device };
+    if (name === "@qingfeng346/ui-kit") return { confirm: { show: async () => true }, toast: { show: () => {} } };
+    throw Error(name);
+  }, module, module.exports);
+  return { store: module.exports, native, calls, watchers, send: event => handler(event) };
+}
+
+test("logcat keeps file capture independent of preview truncation and clearing", async () => {
+  const fixture = logcatFixture();
+  const store = fixture.store;
+  await store.start();
+  assert.equal(fixture.calls.length, 1);
+  fixture.send({ lines: Array.from({ length: 6001 }, (_, i) => `line ${i}`), finished: false });
+  assert.equal(store.lines.value.length, 5000);
+  assert.equal(store.lines.value[0], "line 1001");
+  store.lines.value = [];
+  assert.equal(store.running.value, true);
+  assert.equal(store.savedPath.value, "cache/session.log");
+  await store.exportComplete();
+  assert.deepEqual(fixture.calls.find(call => call[0] === "export-session"), ["export-session", fixture.calls[0][2], "capture.log"]);
+  assert.equal(fixture.calls.filter(call => call[0] === "export").length, 0);
+  await store.stop();
+  assert.deepEqual(store.lines.value, ["last buffered line"]);
+  assert.equal(store.running.value, false);
+  await store.exportComplete();
+  assert.equal(fixture.calls.filter(call => call[0] === "export-session").length, 2);
+  await store.clearCache();
+  assert.equal(store.savedPath.value, "");
+  assert.ok(fixture.calls.some(call => call[0] === "clear-cache"));
+});
+
+test("logcat exports the filtered snapshot and stops when the selected device changes", async () => {
+  const fixture = logcatFixture();
+  await fixture.store.start();
+  await fixture.store.clearCache();
+  assert.ok(!fixture.calls.some(call => call[0] === "clear-cache"));
+  await fixture.store.exportDisplayed(["filtered line"]);
+  assert.deepEqual(fixture.calls.find(call => call[0] === "export"), ["export", "capture.log", "filtered line\n"]);
+  fixture.watchers[0][1]();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(fixture.store.running.value, false);
+  assert.equal(fixture.calls.filter(call => call[0] === "stop").length, 1);
+});
+
 test("ADB parsers preserve offline devices and reject package-manager errors", () => {
   const { parseDevices, parsePackages } = load("adb", {});
   assert.deepEqual(parsePackages("package:android\r\npackage:com.example.app\r\npackage:com.example.app\n"), ["android", "com.example.app"]);
@@ -70,6 +134,33 @@ test("OBB upload builds the destination in TS and rejects malformed filenames", 
   assert.deepEqual(calls[0], ["-s", "emulator-5554", "shell", "mkdir", "-p", "/sdcard/Android/obb/com.example.app"]);
   assert.equal(calls[1].at(-1), "/sdcard/Android/obb/com.example.app/main.42.com.example.app.obb");
   await assert.rejects(adb.pushObb("emulator-5554", "random.obb"), /OBB 文件名/);
+});
+
+test("device directory parsing preserves unusual filenames and folder/link metadata", () => {
+  const { parseDeviceFiles, normalizeDevicePath } = load("adb", {});
+  const files = parseDeviceFiles("f\n81a4 42 1700000000\n中文 ' file\nname.txt\0d\na1ff 7 1700000001\nDownload\0");
+  assert.equal(files[0].name, "Download");
+  assert.equal(files[0].directory, true);
+  assert.equal(files[0].symbolicLink, true);
+  assert.equal(files[1].name, "中文 ' file\nname.txt");
+  assert.equal(files[1].size, 42);
+  assert.equal(files[1].modifiedAt, 1700000000000);
+  assert.equal(normalizeDevicePath("/sdcard/Download/.././DCIM//"), "/sdcard/DCIM");
+  assert.equal(normalizeDevicePath("/../../"), "/");
+  assert.throws(() => normalizeDevicePath("relative"), /绝对路径/);
+  assert.throws(() => normalizeDevicePath("/bad\0path"), /绝对路径/);
+  assert.throws(() => parseDeviceFiles("broken\0"), /解析/);
+});
+
+test("device directory command quotes shell metacharacters and propagates access errors", async () => {
+  const calls = [];
+  const { adb } = load("adb", { adbCommand: async args => { calls.push(args); return output(""); } });
+  await adb.listFiles("emulator-5554", "/sdcard/a'$(echo bad); 中文");
+  assert.deepEqual(calls[0].slice(0, 4), ["-s", "emulator-5554", "shell", "-T"]);
+  assert.ok(calls[0][4].startsWith("cd '/sdcard/a'\"'\"'$(echo bad); 中文' &&"));
+  await assert.rejects(adb.listFiles("bad;id", "/"), /设备标识/);
+  const denied = load("adb", { adbCommand: async () => { throw Error("Permission denied"); } });
+  await assert.rejects(denied.adb.listFiles("emulator-5554", "/data/data"), /Permission denied/);
 });
 
 function packageFixture() {

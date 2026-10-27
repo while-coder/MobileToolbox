@@ -13,8 +13,7 @@
     "./package-details": "./src/components/PackageDetails.vue",
     "./file-browser": "./src/components/FileBrowser.vue",
     "./devices": "./src/components/DevicePanel.vue",
-    "./settings": "./src/components/SettingsPanel.vue",
-    "./log": "./src/components/LogConsole.vue"
+    "./settings": "./src/components/SettingsPanel.vue"
   },
   "scripts": {
     "check": "vue-tsc --noEmit"

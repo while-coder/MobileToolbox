@@ -10,29 +10,27 @@ import type {
   LoadText,
   PackageInfo,
 } from "@mobiletoolbox/protocol"
-import ResizeHandle from "@mobiletoolbox/ui/resize-handle"
 import AppShell from "@mobiletoolbox/ui/shell"
 import PackageList from "@mobiletoolbox/ui/package-list"
 import PackageDetails from "@mobiletoolbox/ui/package-details"
 import DevicePanel from "@mobiletoolbox/ui/devices"
 import SettingsPanel from "@mobiletoolbox/ui/settings"
-import LogConsole from "@mobiletoolbox/ui/log"
+import { log } from "./log"
+import LogcatPanel from "./features/devices/LogcatPanel.vue"
+import DeviceFilesPanel from "./features/devices/DeviceFilesPanel.vue"
 import type { ViewId } from "@mobiletoolbox/ui/types"
 import { native } from "./platform/native"
 import { errorText } from "./utils/errors"
 import UpdaterDialog from "./features/updater/UpdaterDialog.vue"
 import { useTauriUpdater } from "./features/updater/useTauriUpdater"
+import { useNativeAppMenu } from "./composables/useNativeAppMenu"
 import {
   activeView,
-  clearLogs,
   environment,
   environmentError,
   environmentLoading,
   handleProgress,
   loadEnvironment,
-  logLocal,
-  logs,
-  pushLog,
   runningList,
 } from "./stores/appStore"
 import {
@@ -87,12 +85,13 @@ watch(() => activeView.value === "devices" && selectedDevice.value?.state === "d
 }, { immediate: true })
 
 const dragActive = ref(false)
+const settingsVisible = ref(false)
+const settingsTab = ref("environment")
 const unlisteners: UnlistenFn[] = []
 
 const views: Record<ViewId, { title: string; subtitle: string }> = {
   packages: { title: "安装包分析", subtitle: "导入 APK，查看清单、资源与反编译源码。" },
-  devices: { title: "设备管理", subtitle: "通过 adb 管理真机与模拟器，安装和管理设备应用。" },
-  settings: { title: "设置", subtitle: "检查本地工具链与工作目录。" },
+  devices: { title: "设备管理", subtitle: "通过 adb 管理真机与模拟器，管理设备应用并查看 logcat。" },
 }
 
 const pageTitle = computed(() => views[activeView.value].title)
@@ -101,6 +100,7 @@ const appVersion = computed(() => environment.value?.appVersion ?? "0.1.0")
 
 const updater = useTauriUpdater()
 const { updateStatus, updateStatusText, updaterSupported, checkForUpdate } = updater
+const { active: nativeMenuActive } = useNativeAppMenu(() => openSettings())
 
 /** 导入任务在拿到安装包 id 之前只有文件名，因此用 id 为空来识别。 */
 const importTask = computed(() => runningList.value.find((task) => task.id === null) ?? null)
@@ -166,7 +166,12 @@ const loadImage: LoadImage = (root, relativePath) => {
 function navigate(next: ViewId): void {
   activeView.value = next
   if (next === "devices") void refreshDevices(true)
-  if (next === "settings") void loadEnvironment()
+}
+
+function openSettings(tab = "environment"): void {
+  settingsTab.value = tab
+  settingsVisible.value = true
+  void loadEnvironment()
 }
 
 function handleQuery(value: string): void {
@@ -287,7 +292,7 @@ function onKeydown(event: KeyboardEvent): void {
 
 async function setupNative(): Promise<void> {
   if (native.isTauri) {
-    unlisteners.push(await native.onLog(pushLog))
+    unlisteners.push(await native.onLog(log.write))
     unlisteners.push(await native.onProgress(handleProgress))
     try {
       const webview = getCurrentWebview()
@@ -309,7 +314,7 @@ async function setupNative(): Promise<void> {
         }),
       )
     } catch (error) {
-      logLocal("拖拽", errorText(error), "error")
+      log.error("拖拽", errorText(error))
     }
   }
 
@@ -339,7 +344,9 @@ onBeforeUnmount(() => {
       :device-count="devices.length"
       :status-tone="statusTone"
       :status-text="statusText"
+      :native-menu-active="nativeMenuActive"
       @navigate="navigate"
+      @settings="openSettings()"
     >
       <template #actions>
         <template v-if="activeView === 'packages'">
@@ -361,35 +368,25 @@ onBeforeUnmount(() => {
           <RefreshCw v-if="!devicesLoading" :size="13" />
           刷新设备
         </SButton>
-        <SButton
-          v-else
-          size="small"
-          :loading="environmentLoading"
-          @click="loadEnvironment"
-        >
-          <RefreshCw v-if="!environmentLoading" :size="13" />
-          重新检测
-        </SButton>
       </template>
 
-      <div v-if="activeView === 'packages'" class="packages-layout">
-        <div class="package-column">
-          <ResizeHandle label="调整安装包库宽度" :min="240" />
-          <PackageList
-            :packages="packages"
-            :selected-id="selectedId"
-            :icons="icons"
-            :busy="busy"
-            :query="query"
-            :importing="importing"
-            :import-task="importTask"
-            @select="selectPackage"
-            @import="pickAndImport"
-            @delete="remove"
-            @reveal="reveal"
-            @update:query="handleQuery"
-          />
-        </div>
+      <template #library>
+        <PackageList
+          :packages="packages"
+          :selected-id="selectedId"
+          :icons="icons"
+          :busy="busy"
+          :query="query"
+          :importing="importing"
+          :import-task="importTask"
+          @select="selectPackage"
+          @import="pickAndImport"
+          @delete="remove"
+          @reveal="reveal"
+          @update:query="handleQuery"
+        />
+      </template>
+      <template #packages>
         <PackageDetails
           :pkg="selectedPackage"
           :icon-url="iconFor(selectedId)"
@@ -406,48 +403,60 @@ onBeforeUnmount(() => {
           @install="install"
           @delete="remove"
         />
-      </div>
-
-      <DevicePanel
-        v-else-if="activeView === 'devices'"
-        :devices="devices"
-        :selected-id="selectedDeviceId"
-        :loading="devicesLoading"
-        :connecting="connecting"
-        :busy-text="busyText"
-        :packages="packages"
-        :installed-apps="installedApps"
-        :apps-loading="appsLoading"
-        :apps-error="appsError"
-        @refresh="refreshDevices(false)"
-        @refresh-apps="refreshInstalledApps"
-        @select="selectDevice"
-        @connect="connectDevice"
-        @disconnect="disconnectDevice"
-        @pick-install="pickDeviceInstall"
-        @pick-obb="pickDeviceObb"
-        @install-library="installFromLibrary"
-        @uninstall="uninstallFromDevice"
-      />
-
-      <SettingsPanel
-        v-else
-        :environment="environment"
-        :packages-count="packages.length"
-        :loading="environmentLoading"
-        :update-status="updateStatus"
-        :update-status-text="updateStatusText"
-        :updater-supported="updaterSupported"
-        @refresh="loadEnvironment"
-        @open-workdir="openWorkDir"
-        @clear-all="clearAll"
-        @check-update="updateStatus === 'installed' ? updater.relaunchApp() : checkForUpdate({ silent: false })"
-      />
-
-      <template #footer>
-        <LogConsole :lines="logs" :tasks="runningList" @clear="clearLogs" />
       </template>
+
+      <template #devices>
+        <DevicePanel
+          :devices="devices"
+          :selected-id="selectedDeviceId"
+          :loading="devicesLoading"
+          :connecting="connecting"
+          :busy-text="busyText"
+          :packages="packages"
+          :installed-apps="installedApps"
+          :apps-loading="appsLoading"
+          :apps-error="appsError"
+          @refresh="refreshDevices(false)"
+          @refresh-apps="refreshInstalledApps"
+          @select="selectDevice"
+          @connect="connectDevice"
+          @disconnect="disconnectDevice"
+          @pick-install="pickDeviceInstall"
+          @pick-obb="pickDeviceObb"
+          @install-library="installFromLibrary"
+          @uninstall="uninstallFromDevice"
+        >
+          <template #logcat>
+            <LogcatPanel :device-id="selectedDevice?.state === 'device' ? selectedDevice.id : null" />
+          </template>
+          <template #files>
+            <DeviceFilesPanel :device-id="selectedDevice?.state === 'device' ? selectedDevice.id : null" />
+          </template>
+        </DevicePanel>
+      </template>
+
     </AppShell>
+
+    <SModal :show="settingsVisible" preset="card" title="设置"
+      :style="{ width: 'min(880px, calc(100vw - 32px))' }"
+      @update:show="settingsVisible = $event">
+      <div class="settings-dialog-content">
+        <SettingsPanel
+          v-model:tab="settingsTab"
+          :app-version="appVersion"
+          :environment="environment"
+          :packages-count="packages.length"
+          :loading="environmentLoading"
+          :update-status="updateStatus"
+          :update-status-text="updateStatusText"
+          :updater-supported="updaterSupported"
+          @refresh="loadEnvironment"
+          @open-workdir="openWorkDir"
+          @clear-all="clearAll"
+          @check-update="updateStatus === 'installed' ? updater.relaunchApp() : checkForUpdate({ silent: false })"
+        />
+      </div>
+    </SModal>
 
     <UpdaterDialog v-if="native.isTauri" :current-version="appVersion" />
 
@@ -471,17 +480,8 @@ onBeforeUnmount(() => {
   height: 100%;
 }
 
-.packages-layout {
-  --pane-size: initial;
-  display: grid;
-  height: 100%;
-  min-height: 0;
-  grid-template-columns: var(--pane-size, minmax(300px, 360px)) minmax(0, 1fr);
-}
-
-.package-column {
-  position: relative;
-  min-width: 0;
+.settings-dialog-content {
+  height: min(600px, calc(100dvh - 148px));
   min-height: 0;
 }
 
@@ -539,9 +539,4 @@ onBeforeUnmount(() => {
   opacity: 0;
 }
 
-@media (max-width: 1080px) {
-  .packages-layout {
-    grid-template-columns: var(--pane-size, minmax(270px, 320px)) minmax(0, 1fr);
-  }
-}
 </style>

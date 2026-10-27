@@ -626,6 +626,22 @@ fn qualify_activity(package: &str, activity: &str) -> String {
     }
 }
 
+/// 旧条目可能记录了提取失败；加载图标时从原 APK 补齐缓存。
+pub fn ensure_icon(dir: &Path, info: &mut PackageInfo) -> Result<Option<PathBuf>, String> {
+    if let Some(path) = store::icon_path(dir, info) {
+        return Ok(Some(path));
+    }
+    let apk = store::apk_path(dir);
+    let parsed = parse_apk(&apk)?;
+    let Some(extension) = extract_icon(&apk, dir, &parsed) else {
+        return Ok(None);
+    };
+    info.has_icon = true;
+    info.icon_ext = Some(extension);
+    store::save_info(dir, info)?;
+    Ok(store::icon_path(dir, info))
+}
+
 fn extract_icon(apk: &Path, dir: &Path, parsed: &ParsedApk) -> Option<String> {
     let mut candidates: Vec<(u32, String)> = parsed
         .icon_candidates
@@ -685,5 +701,35 @@ fn icon_extension(path: &str) -> Option<&'static str> {
         "jpg" | "jpeg" => Some("jpg"),
         "webp" => Some("webp"),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[ignore = "requires MOBILETOOLBOX_TEST_APK pointing to a local APK"]
+    fn extracts_icon_from_apk() {
+        let apk = PathBuf::from(std::env::var("MOBILETOOLBOX_TEST_APK").unwrap());
+        let parsed = parse_apk(&apk).unwrap();
+        let dir = std::env::temp_dir().join(format!("mobiletoolbox-icon-test-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let extension = extract_icon(&apk, &dir, &parsed);
+        let valid = extension.as_ref().is_some_and(|ext| {
+            fs::metadata(dir.join(format!("icon.{ext}"))).unwrap().len() > 0
+        });
+        // 模拟旧版导入的无图标记录，确保加载时能够恢复并持久化。
+        let mut info = PackageInfo::default();
+        if let Some(ext) = &extension {
+            fs::remove_file(dir.join(format!("icon.{ext}"))).unwrap();
+        }
+        fs::copy(&apk, dir.join("original.apk")).unwrap();
+        store::save_info(&dir, &info).unwrap();
+        let recovered = ensure_icon(&dir, &mut info).unwrap();
+        assert!(recovered.is_some());
+        assert!(store::load_info(&dir).unwrap().has_icon);
+        fs::remove_dir_all(&dir).unwrap();
+        assert!(valid, "APK launcher icon was not extracted");
     }
 }

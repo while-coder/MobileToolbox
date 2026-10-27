@@ -43,6 +43,7 @@ const locale = typeof navigator === "undefined" ? "zh-CN" : navigator.language
 const address = ref("")
 const libraryId = ref<string>("")
 const appQuery = ref("")
+const detailTab = ref<"apps" | "logcat" | "files">("apps")
 const appFilter = ref<"third-party" | "system" | "all">("third-party")
 const appFilters = [
   { id: "third-party" as const, label: "第三方应用" },
@@ -173,7 +174,7 @@ function installFromLibrary(): void {
           @click="emit('select', device.id)"
         >
           <span class="state-dot" :class="stateClass(device.state)" />
-          <span class="device-main">
+          <span class="device-summary">
             <span class="device-name">{{ deviceLabel(device) }}</span>
             <span class="device-id apk-mono">{{ device.id }}</span>
             <span class="device-meta">
@@ -229,85 +230,85 @@ function installFromLibrary(): void {
           <span>{{ busyText }}</span>
         </div>
 
-        <div class="action-grid">
-          <div class="action-card">
-            <div class="action-title"><PackageOpen :size="14" /> 安装 APK</div>
-            <p>从安装包库选择一个 APK 安装到当前设备，或在系统中挑选文件。</p>
-            <SSelect
-              v-model:value="libraryId"
-              size="small"
-              :options="packageOptions"
-              placeholder="安装包库为空"
-              :disabled="busy || packages.length === 0"
-            />
-            <div class="action-buttons">
-              <SButton type="primary" size="small" :disabled="!canAct || busy || packages.length === 0" @click="installFromLibrary">
-                <PackageOpen :size="13" />
-                安装所选安装包
-              </SButton>
-              <SButton size="small" :disabled="!canAct || busy" @click="emit('pick-install')">
-                选择 APK 文件
-              </SButton>
-            </div>
-          </div>
-
-          <div class="action-card">
-            <div class="action-title"><FolderUp :size="14" /> 推送 OBB</div>
-            <p>选择 <span class="apk-mono">main.*.obb</span>，自动推送到 <span class="apk-mono">/sdcard/Android/obb/&lt;包名&gt;/</span>。</p>
-            <div class="action-buttons single">
-              <SButton size="small" :disabled="!canAct || busy" @click="emit('pick-obb')">
-                <FolderUp :size="13" />
-                选择 OBB 文件并推送
-              </SButton>
-            </div>
-          </div>
-
+        <div class="apps-filters" role="group" aria-label="设备功能">
+          <button type="button" :class="{ active: detailTab === 'apps' }" :aria-pressed="detailTab === 'apps'" @click="detailTab = 'apps'">应用管理</button>
+          <button type="button" :class="{ active: detailTab === 'logcat' }" :aria-pressed="detailTab === 'logcat'" @click="detailTab = 'logcat'">ADB logcat</button>
+          <button type="button" :class="{ active: detailTab === 'files' }" :aria-pressed="detailTab === 'files'" @click="detailTab = 'files'">文件管理</button>
         </div>
-
-        <section class="apps-card" aria-label="设备应用管理">
-          <header class="apps-heading">
-            <div class="action-title"><PackageOpen :size="14" /> 应用管理 <span class="apps-count">{{ filteredApps.length }} / {{ installedApps.length }}</span></div>
-            <SButton size="small" :loading="appsLoading" :disabled="!canAct || busy" @click="emit('refresh-apps')">
-              <RefreshCw v-if="!appsLoading" :size="13" />刷新应用
-            </SButton>
-          </header>
-          <div class="apps-toolbar">
-            <div class="apps-filters" role="group" aria-label="应用分类">
-              <button v-for="filter in appFilters" :key="filter.id" type="button"
-                :class="{ active: appFilter === filter.id }" :aria-pressed="appFilter === filter.id"
-                @click="appFilter = filter.id">{{ filter.label }}</button>
-            </div>
-            <div class="apps-search">
-              <Search :size="14" aria-hidden="true" />
-              <SInput v-model:value="appQuery" size="small" clearable class="apps-search-input"
-                placeholder="搜索应用名称或包名…" aria-label="搜索设备应用名称或包名" />
-            </div>
-          </div>
-          <div v-if="!canAct" class="apps-state">设备未在线，请连接并授权后刷新。</div>
-          <div v-else-if="appsLoading" class="apps-state" role="status"><span class="apk-spinner" />正在读取设备应用…</div>
-          <div v-else-if="appsError" class="apps-state error" role="alert">
-            <span>{{ appsError }}</span>
-            <SButton size="small" @click="emit('refresh-apps')">重试</SButton>
-          </div>
-          <div v-else-if="filteredApps.length === 0" class="apps-state">
-            {{ appQuery.trim() ? '没有匹配的应用' : '暂无此类应用' }}
-          </div>
-          <ul v-else class="apps-list" aria-label="已安装应用">
-            <li v-for="app in filteredApps" :key="app.packageName" class="app-row">
-              <PackageOpen :size="18" class="app-icon" aria-hidden="true" />
-              <div class="app-info">
-                <strong class="app-name" :title="app.appName">{{ app.appName }}</strong>
-                <span class="app-package apk-mono" :title="app.packageName">{{ app.packageName }}</span>
+        <div v-if="detailTab === 'logcat'" class="device-logcat"><slot name="logcat" /></div>
+        <div v-else-if="detailTab === 'files'" class="device-files"><slot name="files" /></div>
+        <div v-else class="device-apps">
+          <div class="action-grid">
+            <div class="action-card">
+              <div class="action-title"><PackageOpen :size="14" /> 安装 APK</div>
+              <p>从安装包库选择一个 APK 安装到当前设备，或在系统中挑选文件。</p>
+              <SSelect
+                v-model:value="libraryId"
+                size="small"
+                :options="packageOptions"
+                placeholder="安装包库为空"
+                :disabled="busy || packages.length === 0"
+              />
+              <div class="action-buttons">
+                <SButton type="primary" size="small" :disabled="!canAct || busy || packages.length === 0" @click="installFromLibrary">
+                  <PackageOpen :size="13" />
+                  安装所选安装包
+                </SButton>
+                <SButton size="small" :disabled="!canAct || busy" @click="emit('pick-install')">
+                  选择 APK 文件
+                </SButton>
+                <SButton size="small" :disabled="!canAct || busy" @click="emit('pick-obb')">
+                  <FolderUp :size="13" />
+                  选择 OBB 文件并推送
+                </SButton>
               </div>
-              <STag size="small" :bordered="false">{{ app.system ? '系统' : '第三方' }}</STag>
-              <SButton size="small" type="error" tertiary :disabled="busy || app.system"
-                :title="app.system ? '系统应用暂不提供卸载' : `卸载 ${app.packageName}`"
-                @click="emit('uninstall', app.packageName)">
-                <Trash2 :size="13" />卸载
+            </div>
+          </div>
+          <section class="apps-card" aria-label="设备应用管理">
+            <header class="apps-heading">
+              <div class="action-title"><PackageOpen :size="14" /> 应用管理 <span class="apps-count">{{ filteredApps.length }} / {{ installedApps.length }}</span></div>
+              <SButton size="small" :loading="appsLoading" :disabled="!canAct || busy" @click="emit('refresh-apps')">
+                <RefreshCw v-if="!appsLoading" :size="13" />刷新应用
               </SButton>
-            </li>
-          </ul>
-        </section>
+            </header>
+            <div class="apps-toolbar">
+              <div class="apps-filters" role="group" aria-label="应用分类">
+                <button v-for="filter in appFilters" :key="filter.id" type="button"
+                  :class="{ active: appFilter === filter.id }" :aria-pressed="appFilter === filter.id"
+                  @click="appFilter = filter.id">{{ filter.label }}</button>
+              </div>
+              <div class="apps-search">
+                <Search :size="14" aria-hidden="true" />
+                <SInput v-model:value="appQuery" size="small" clearable class="apps-search-input"
+                  placeholder="搜索应用名称或包名…" aria-label="搜索设备应用名称或包名" />
+              </div>
+            </div>
+            <div v-if="!canAct" class="apps-state">设备未在线，请连接并授权后刷新。</div>
+            <div v-else-if="appsLoading" class="apps-state" role="status"><span class="apk-spinner" />正在读取设备应用…</div>
+            <div v-else-if="appsError" class="apps-state error" role="alert">
+              <span>{{ appsError }}</span>
+              <SButton size="small" @click="emit('refresh-apps')">重试</SButton>
+            </div>
+            <div v-else-if="filteredApps.length === 0" class="apps-state">
+              {{ appQuery.trim() ? '没有匹配的应用' : '暂无此类应用' }}
+            </div>
+            <ul v-else class="apps-list" aria-label="已安装应用">
+              <li v-for="app in filteredApps" :key="app.packageName" class="app-row">
+                <PackageOpen :size="18" class="app-icon" aria-hidden="true" />
+                <div class="app-info">
+                  <strong class="app-name" :title="app.appName">{{ app.appName }}</strong>
+                  <span class="app-package apk-mono" :title="app.packageName">{{ app.packageName }}</span>
+                </div>
+                <STag size="small" :bordered="false">{{ app.system ? '系统' : '第三方' }}</STag>
+                <SButton size="small" type="error" tertiary :disabled="busy || app.system"
+                  :title="app.system ? '系统应用暂不提供卸载' : `卸载 ${app.packageName}`"
+                  @click="emit('uninstall', app.packageName)">
+                  <Trash2 :size="13" />卸载
+                </SButton>
+              </li>
+            </ul>
+          </section>
+        </div>
 
         <div class="tips-card">
           <strong>连接提示</strong>
@@ -335,6 +336,7 @@ function installFromLibrary(): void {
   height: 100%;
   min-height: 0;
   grid-template-columns: var(--pane-size, minmax(300px, 360px)) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
 }
 .device-column {
@@ -483,7 +485,7 @@ function installFromLibrary(): void {
   background: var(--apk-red);
   box-shadow: 0 0 0 3px rgba(251, 113, 133, 0.13);
 }
-.device-main {
+.device-summary {
   display: flex;
   min-width: 0;
   flex-direction: column;
@@ -502,7 +504,7 @@ function installFromLibrary(): void {
   color: var(--apk-faint);
   font-size: 10px;
 }
-.device-card > .device-main {
+.device-card > .device-summary {
   display: flex;
   min-width: 0;
   flex: 1;
@@ -516,9 +518,18 @@ function installFromLibrary(): void {
   font-size: 10px;
 }
 .device-main {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  gap: 12px;
   overflow-y: auto;
-  padding: 18px 20px 24px;
+  padding: 14px 16px;
 }
+.device-main > :not(.device-apps):not(.device-logcat):not(.device-files) { flex-shrink: 0; }
+.device-apps { display: flex; min-height: 360px; flex: 1; flex-direction: column; gap: 12px; }
+.device-logcat, .device-files { min-height: 360px; flex: 1; }
+.device-logcat > :deep(*), .device-files > :deep(*) { height: 100%; }
 .device-hero {
   display: flex;
   align-items: center;
@@ -588,7 +599,8 @@ function installFromLibrary(): void {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 12px;
-  margin-top: 14px;
+  margin-top: 0;
+  flex: 0 0 auto;
   align-items: start;
 }
 .action-card {
@@ -625,11 +637,11 @@ function installFromLibrary(): void {
   flex-wrap: wrap;
   gap: 7px;
 }
-.action-buttons.single {
-  margin-top: 2px;
-}
 .apps-card {
-  margin-top: 14px;
+  display: flex;
+  min-height: 160px;
+  flex: 1;
+  flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--apk-border);
   border-radius: var(--apk-radius);
@@ -637,6 +649,7 @@ function installFromLibrary(): void {
 }
 .apps-heading, .apps-toolbar {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
@@ -661,7 +674,7 @@ function installFromLibrary(): void {
 .apps-search { display: flex; min-width: 180px; flex: 1; align-items: center; gap: 6px; color: var(--apk-muted); }
 .apps-search-input { min-width: 0; flex: 1; }
 .apps-search > svg, .app-icon { flex: 0 0 auto; }
-.apps-list { max-height: 420px; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.apps-list { min-height: 0; flex: 1; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
 .app-row { display: flex; min-height: 48px; align-items: center; gap: 10px; padding: 8px 14px; }
 .app-row + .app-row { border-top: 1px solid var(--apk-border); }
 .app-row:hover { background: rgba(148, 163, 184, 0.04); }
@@ -672,7 +685,7 @@ function installFromLibrary(): void {
 .apps-state { display: flex; min-height: 100px; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; padding: 20px; color: var(--apk-muted); font-size: 12px; overflow-wrap: anywhere; }
 .apps-state.error { color: var(--apk-red); }
 .tips-card {
-  margin-top: 14px;
+  margin-top: 0;
   padding: 14px;
   border: 1px solid var(--apk-border);
   border-radius: var(--apk-radius);

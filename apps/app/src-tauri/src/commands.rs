@@ -337,8 +337,8 @@ pub async fn clear_packages(app: AppHandle, state: State<'_, AppState>) -> Resul
 #[tauri::command]
 pub fn get_package_icon(state: State<'_, AppState>, id: String) -> Result<Option<String>, String> {
     let dir = store::package_dir(&state, &id)?;
-    let info = store::load_info(&dir)?;
-    let Some(icon) = store::icon_path(&dir, &info) else {
+    let mut info = store::load_info(&dir)?;
+    let Some(icon) = apk::ensure_icon(&dir, &mut info)? else {
         return Ok(None);
     };
     let bytes = fs::read(&icon).map_err(|error| format!("读取图标失败：{}", error))?;
