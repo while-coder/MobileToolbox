@@ -97,14 +97,6 @@ pub fn require_java() -> Result<PathBuf, String> {
     }
 }
 
-pub fn require_jar(path: &Path, label: &str) -> Result<PathBuf, String> {
-    if path.is_file() {
-        Ok(path.to_path_buf())
-    } else {
-        Err(format!("未找到 {}：{}", label, path.display()))
-    }
-}
-
 pub fn build_environment(app: &AppHandle, state: &AppState) -> EnvironmentInfo {
     let java = detect_java();
     let adb = detect_binary(adb_binary(state), "adb", "version");

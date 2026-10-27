@@ -110,6 +110,20 @@ pub fn root_dir(dir: &Path, root: &str) -> Result<PathBuf, String> {
 }
 
 /// 把前端传来的相对路径限制在浏览根目录内，并使用 canonicalize 阻断符号链接越界。
+pub fn validate_relative_path(relative: &str) -> Result<(), String> {
+    let normalized = relative.replace('\\', "/");
+    if normalized.is_empty()
+        || normalized.len() > 4096
+        || normalized.starts_with('/')
+        || normalized
+            .split('/')
+            .any(|part| part == ".." || part == "." || part.contains(':') || part.contains('\0'))
+    {
+        return Err("非法的相对路径".into());
+    }
+    Ok(())
+}
+
 pub fn safe_join(root: &Path, relative: &str) -> Result<PathBuf, String> {
     if !root.exists() {
         return Err(format!("目录不存在：{}", root.display()));

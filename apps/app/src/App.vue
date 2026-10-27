@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue"
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { PackageOpen, RefreshCw, Upload } from "lucide-vue-next"
 import type { UnlistenFn } from "@tauri-apps/api/event"
 import { getCurrentWebview } from "@tauri-apps/api/webview"
@@ -57,30 +57,41 @@ import {
   selectPackage,
 } from "./stores/packagesStore"
 import {
+  appsError,
+  appsLoading,
   busyText,
+  clearInstalledApps,
   connectDevice,
   connecting,
   devices,
   disconnectDevice,
   installPackage,
   installPaths,
+  installedApps,
   loading as devicesLoading,
   onlineCount,
   pickAndInstall,
   pickAndPushObb,
   refreshDevices,
+  refreshInstalledApps,
   selectedDevice,
   selectedDeviceId,
   selectDevice,
   uninstallPackage,
 } from "./stores/devicesStore"
 
+watch(() => activeView.value === "devices" && selectedDevice.value?.state === "device"
+  ? selectedDevice.value.id : null, (deviceId) => {
+  if (deviceId) void refreshInstalledApps()
+  else clearInstalledApps()
+}, { immediate: true })
+
 const dragActive = ref(false)
 const unlisteners: UnlistenFn[] = []
 
 const views: Record<ViewId, { title: string; subtitle: string }> = {
   packages: { title: "安装包分析", subtitle: "导入 APK，查看清单、资源与反编译源码。" },
-  devices: { title: "设备与安装", subtitle: "通过 adb 管理真机与模拟器，安装安装包库中的应用。" },
+  devices: { title: "设备管理", subtitle: "通过 adb 管理真机与模拟器，安装和管理设备应用。" },
   settings: { title: "设置", subtitle: "检查本地工具链与工作目录。" },
 }
 
@@ -405,7 +416,11 @@ onBeforeUnmount(() => {
         :connecting="connecting"
         :busy-text="busyText"
         :packages="packages"
+        :installed-apps="installedApps"
+        :apps-loading="appsLoading"
+        :apps-error="appsError"
         @refresh="refreshDevices(false)"
+        @refresh-apps="refreshInstalledApps"
         @select="selectDevice"
         @connect="connectDevice"
         @disconnect="disconnectDevice"

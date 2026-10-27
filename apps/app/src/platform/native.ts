@@ -2,7 +2,6 @@ import { invoke } from "@tauri-apps/api/core"
 import { listen, type UnlistenFn } from "@tauri-apps/api/event"
 import { open } from "@tauri-apps/plugin-dialog"
 import type {
-  AndroidDevice,
   BrowserRoot,
   DirectoryListing,
   EnvironmentInfo,
@@ -12,6 +11,9 @@ import type {
   ProgressEvent,
   TextPreview,
 } from "@mobiletoolbox/protocol"
+
+export interface CommandOutput { stdout: string; stderr: string }
+export interface CommandOptions { stream?: boolean; source?: string; cwd?: string }
 
 export const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
 
@@ -35,10 +37,6 @@ export const native = {
   removePackage: (id: string) => invoke<void>("remove_package", { id }),
   clearPackages: () => invoke<void>("clear_packages"),
 
-  decodePackage: (id: string) => invoke<PackageInfo>("decode_package", { id }),
-  buildJar: (id: string) => invoke<PackageInfo>("build_jar", { id }),
-  decompilePackage: (id: string) => invoke<PackageInfo>("decompile_package", { id }),
-
   getPackageIcon: (id: string) => invoke<string | null>("get_package_icon", { id }),
   listPackageDirectory: (id: string, root: BrowserRoot, relativePath: string) =>
     invoke<DirectoryListing>("list_package_dir", { id, root, relativePath }),
@@ -52,17 +50,12 @@ export const native = {
   revealPackage: (id: string) => invoke<void>("reveal_package", { id }),
   openPath: (path: string) => invoke<void>("open_path", { path }),
 
-  adbDevices: () => invoke<AndroidDevice[]>("adb_devices"),
-  adbConnect: (address: string) => invoke<string>("adb_connect", { address }),
-  adbDisconnect: (address: string) => invoke<string>("adb_disconnect", { address }),
-  adbInstall: (deviceId: string, apkPath: string) =>
-    invoke<string>("adb_install", { deviceId, apkPath }),
-  adbInstallPackage: (deviceId: string, id: string) =>
-    invoke<string>("adb_install_package", { deviceId, id }),
-  adbPushObb: (deviceId: string, filePath: string) =>
-    invoke<string>("adb_push_obb", { deviceId, filePath }),
-  adbUninstall: (deviceId: string, packageName: string) =>
-    invoke<string>("adb_uninstall", { deviceId, packageName }),
+  runtimePaths: () => invoke<{ workDir: string; toolsDir: string }>("runtime_paths"),
+  adbCommand: (args: string[], options: CommandOptions = {}) => invoke<CommandOutput>("adb_command", { args, ...options }),
+  javaCommand: (args: string[], options: CommandOptions = {}) => invoke<CommandOutput>("java_command", { args, ...options }),
+  packageFile: (id: string, action: "isFile" | "hasEntries" | "remove" | "rename", path: string, destination?: string) =>
+    invoke<boolean>("package_file", { id, action, path, destination }),
+  getPackageInfo: (id: string) => invoke<PackageInfo>("get_package_info", { id }),
 
   onLog: (handler: (event: LogEvent) => void): Promise<UnlistenFn> =>
     listen<LogEvent>("mobiletoolbox://log", (event) => handler(event.payload)),

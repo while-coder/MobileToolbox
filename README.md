@@ -215,6 +215,14 @@ Windows 调试依赖 VS Code 的 **C/C++** 扩展（`cppvsdbg`），macOS 依赖
 | CFR | JAR → Java 源码 | `java -jar cfr.jar <jar> --outputdir <dir> --silent true` |
 | adb | 设备、安装、推送 | `adb devices -l` / `install -r` / `push` / `uninstall` |
 
+设备应用名称由随包附带的 `app-info/app-labels.dex` 通过 ADB 临时运行，使用设备当前语言读取；运行结束会删除设备上的临时文件，读取失败时回退为包名。此功能不需要在设备安装 APK，也不依赖电脑上的 Java。
+
+修改 `apps/app/android-tools/AppLabels.java` 后，使用 JDK 重新生成随包资源：`pnpm build:android-tools`。构建脚本复用内置的 dx，不需要 Android SDK。
+
+工具执行接口只提供 `native.adbCommand(args, options)` 和 `native.javaCommand(args, options)`，由 Rust 统一定位 ADB / Java 并执行参数数组，返回独立的 stdout / stderr；`stream: true` 会同时推送实时日志。设备操作在 `apps/app/src/platform/adb.ts`，apktool / dex2jar / CFR 流程在 `packageCommands.ts` 中组装。临时输出的清理、结果检查和替换由 TS 调用限定在安装包目录内的文件操作完成。
+
+命令编排回归测试：`pnpm test:commands`。设置 `MOBILETOOLBOX_TEST_DEVICE` 为已授权设备序列号后，会额外验证实际设备列表与应用名称读取。
+
 与原版 ScorpioPackageTool 使用 jd-gui 打开 JAR 不同，MobileToolbox 内置 **CFR 0.152** 直接在应用内浏览反编译源码，避免额外窗口，也兼容 Java 21。原版 jd-gui 在 Java 21 下会因初始化失败而无法启动。
 
 ## 安全与限制

@@ -7,11 +7,12 @@ import {
   PackageOpen,
   PlugZap,
   RefreshCw,
+  Search,
   Smartphone,
   Trash2,
   Usb,
 } from "lucide-vue-next"
-import { adbStateLabel, deviceLabel, localizedLabel, type AndroidDevice, type PackageInfo } from "@mobiletoolbox/protocol"
+import { adbStateLabel, deviceLabel, localizedLabel, type AndroidDevice, type InstalledApp, type PackageInfo } from "@mobiletoolbox/protocol"
 import { toast } from "@qingfeng346/ui-kit"
 
 const props = withDefaults(defineProps<{
@@ -21,10 +22,14 @@ const props = withDefaults(defineProps<{
   connecting: boolean
   busyText?: string | null
   packages: PackageInfo[]
+  installedApps: InstalledApp[]
+  appsLoading: boolean
+  appsError: string
 }>(), { busyText: "" })
 
 const emit = defineEmits<{
   refresh: []
+  "refresh-apps": []
   select: [id: string]
   connect: [address: string]
   disconnect: [address: string]
@@ -37,7 +42,21 @@ const emit = defineEmits<{
 const locale = typeof navigator === "undefined" ? "zh-CN" : navigator.language
 const address = ref("")
 const libraryId = ref<string>("")
-const uninstallName = ref("")
+const appQuery = ref("")
+const appFilter = ref<"third-party" | "system" | "all">("third-party")
+const appFilters = [
+  { id: "third-party" as const, label: "第三方应用" },
+  { id: "system" as const, label: "系统应用" },
+  { id: "all" as const, label: "全部" },
+]
+const filteredApps = computed(() => {
+  const keyword = appQuery.value.trim().toLowerCase()
+  return props.installedApps.filter((app) =>
+    (appFilter.value === "all" || app.system === (appFilter.value === "system")) &&
+    (!keyword || app.packageName.toLowerCase().includes(keyword) || app.appName.toLowerCase().includes(keyword)),
+  )
+})
+watch(() => props.selectedId, () => { appQuery.value = "" })
 
 const quickTargets = [
   { label: "MuMu 模拟器", address: "127.0.0.1:7555" },
@@ -95,19 +114,6 @@ function installFromLibrary(): void {
   emit("install-library", libraryId.value)
 }
 
-function submitUninstall(): void {
-  if (!canAct.value) {
-    toast.show("warning", "请先选择一台在线设备")
-    return
-  }
-  const name = uninstallName.value.trim()
-  if (!name) {
-    toast.show("warning", "请输入要卸载的应用包名")
-    return
-  }
-  emit("uninstall", name)
-  uninstallName.value = ""
-}
 </script>
 
 <template>
@@ -256,23 +262,52 @@ function submitUninstall(): void {
             </div>
           </div>
 
-          <div class="action-card">
-            <div class="action-title"><Trash2 :size="14" /> 卸载应用</div>
-            <p>输入设备上的应用包名，例如 <span class="apk-mono">com.example.app</span>。</p>
-            <div class="connect-line">
-              <SInput
-                v-model:value="uninstallName"
-                size="small"
-                placeholder="应用包名"
-                :disabled="busy"
-                @keydown.enter="submitUninstall"
-              />
-              <SButton type="error" size="small" tertiary :disabled="!canAct || busy" @click="submitUninstall">
-                卸载
-              </SButton>
+        </div>
+
+        <section class="apps-card" aria-label="设备应用管理">
+          <header class="apps-heading">
+            <div class="action-title"><PackageOpen :size="14" /> 应用管理 <span class="apps-count">{{ filteredApps.length }} / {{ installedApps.length }}</span></div>
+            <SButton size="small" :loading="appsLoading" :disabled="!canAct || busy" @click="emit('refresh-apps')">
+              <RefreshCw v-if="!appsLoading" :size="13" />刷新应用
+            </SButton>
+          </header>
+          <div class="apps-toolbar">
+            <div class="apps-filters" role="group" aria-label="应用分类">
+              <button v-for="filter in appFilters" :key="filter.id" type="button"
+                :class="{ active: appFilter === filter.id }" :aria-pressed="appFilter === filter.id"
+                @click="appFilter = filter.id">{{ filter.label }}</button>
+            </div>
+            <div class="apps-search">
+              <Search :size="14" aria-hidden="true" />
+              <SInput v-model:value="appQuery" size="small" clearable class="apps-search-input"
+                placeholder="搜索应用名称或包名…" aria-label="搜索设备应用名称或包名" />
             </div>
           </div>
-        </div>
+          <div v-if="!canAct" class="apps-state">设备未在线，请连接并授权后刷新。</div>
+          <div v-else-if="appsLoading" class="apps-state" role="status"><span class="apk-spinner" />正在读取设备应用…</div>
+          <div v-else-if="appsError" class="apps-state error" role="alert">
+            <span>{{ appsError }}</span>
+            <SButton size="small" @click="emit('refresh-apps')">重试</SButton>
+          </div>
+          <div v-else-if="filteredApps.length === 0" class="apps-state">
+            {{ appQuery.trim() ? '没有匹配的应用' : '暂无此类应用' }}
+          </div>
+          <ul v-else class="apps-list" aria-label="已安装应用">
+            <li v-for="app in filteredApps" :key="app.packageName" class="app-row">
+              <PackageOpen :size="18" class="app-icon" aria-hidden="true" />
+              <div class="app-info">
+                <strong class="app-name" :title="app.appName">{{ app.appName }}</strong>
+                <span class="app-package apk-mono" :title="app.packageName">{{ app.packageName }}</span>
+              </div>
+              <STag size="small" :bordered="false">{{ app.system ? '系统' : '第三方' }}</STag>
+              <SButton size="small" type="error" tertiary :disabled="busy || app.system"
+                :title="app.system ? '系统应用暂不提供卸载' : `卸载 ${app.packageName}`"
+                @click="emit('uninstall', app.packageName)">
+                <Trash2 :size="13" />卸载
+              </SButton>
+            </li>
+          </ul>
+        </section>
 
         <div class="tips-card">
           <strong>连接提示</strong>
@@ -593,6 +628,49 @@ function submitUninstall(): void {
 .action-buttons.single {
   margin-top: 2px;
 }
+.apps-card {
+  margin-top: 14px;
+  overflow: hidden;
+  border: 1px solid var(--apk-border);
+  border-radius: var(--apk-radius);
+  background: rgba(9, 17, 30, 0.55);
+}
+.apps-heading, .apps-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--apk-border);
+}
+.apps-count { color: var(--apk-muted); font-size: 11px; font-weight: 400; }
+.apps-filters { display: flex; gap: 4px; }
+.apps-filters button {
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--apk-radius-sm);
+  background: transparent;
+  color: var(--apk-muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+.apps-filters button:hover { background: rgba(148, 163, 184, 0.08); color: var(--apk-text); }
+.apps-filters button.active { background: rgba(56, 189, 248, 0.13); color: var(--apk-accent); }
+.apps-filters button:focus-visible { outline: 2px solid var(--apk-accent); }
+.apps-search { display: flex; min-width: 180px; flex: 1; align-items: center; gap: 6px; color: var(--apk-muted); }
+.apps-search-input { min-width: 0; flex: 1; }
+.apps-search > svg, .app-icon { flex: 0 0 auto; }
+.apps-list { max-height: 420px; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.app-row { display: flex; min-height: 48px; align-items: center; gap: 10px; padding: 8px 14px; }
+.app-row + .app-row { border-top: 1px solid var(--apk-border); }
+.app-row:hover { background: rgba(148, 163, 184, 0.04); }
+.app-icon { color: var(--apk-muted); }
+.app-info { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 3px; }
+.app-name { overflow: hidden; color: var(--apk-text-soft); font-size: 13px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.app-package { overflow: hidden; color: var(--apk-muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.apps-state { display: flex; min-height: 100px; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; padding: 20px; color: var(--apk-muted); font-size: 12px; overflow-wrap: anywhere; }
+.apps-state.error { color: var(--apk-red); }
 .tips-card {
   margin-top: 14px;
   padding: 14px;

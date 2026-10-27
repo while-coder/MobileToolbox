@@ -5,6 +5,8 @@
   "description": "MobileToolbox - mobile app and device inspector desktop app",
   "packageManager": "pnpm@10.30.3",
   "scripts": {
+    "test:commands": "node --test scripts/test-commands.cjs",
+    "build:android-tools": "node scripts/build-android-tools.js",
     "debug:app": "pnpm --filter @mobiletoolbox/protocol build && cargo build --manifest-path apps/app/src-tauri/Cargo.toml",
     "dev": "pnpm --filter @mobiletoolbox/protocol build && pnpm --filter @mobiletoolbox/app tauri dev",
     "dev:web": "pnpm --filter @mobiletoolbox/protocol build && pnpm --filter @mobiletoolbox/app dev",

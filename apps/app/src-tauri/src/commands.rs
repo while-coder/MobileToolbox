@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 
 use tauri::{AppHandle, State};
 
-use crate::adb;
 use crate::apk;
 use crate::model::{
     DirectoryListing, EnvironmentInfo, FileEntry, FileKind, ImportOutcome, PackageImportError,
@@ -16,7 +15,233 @@ use crate::util;
 
 const MAX_DIRECTORY_ENTRIES: usize = 2000;
 const MAX_TEXT_BYTES: u64 = 2 * 1024 * 1024;
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimePaths {
+    work_dir: String,
+    tools_dir: String,
+}
+
+#[tauri::command]
+pub fn runtime_paths(state: State<'_, AppState>) -> RuntimePaths {
+    RuntimePaths {
+        work_dir: state.work_dir.display().to_string(),
+        tools_dir: state.tools_dir.display().to_string(),
+    }
+}
+
+async fn execute_tool(
+    app: AppHandle,
+    program: PathBuf,
+    args: Vec<String>,
+    stream: Option<bool>,
+    source: String,
+    cwd: Option<String>,
+) -> Result<util::Captured, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut command = util::command(program);
+        command.args(args);
+        if let Some(cwd) = cwd {
+            command.current_dir(cwd);
+        }
+        if stream.unwrap_or(false) {
+            util::run_streaming(&app, &source, &mut command)
+        } else {
+            util::run_quiet(&source, &mut command)
+        }
+    })
+    .await
+    .map_err(join_error)?
+}
+
+#[tauri::command]
+pub async fn adb_command(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    args: Vec<String>,
+    stream: Option<bool>,
+    source: Option<String>,
+    cwd: Option<String>,
+) -> Result<util::Captured, String> {
+    execute_tool(
+        app,
+        tools::require_adb(&state)?,
+        args,
+        stream,
+        source.unwrap_or_else(|| "adb".into()),
+        cwd,
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn java_command(
+    app: AppHandle,
+    args: Vec<String>,
+    stream: Option<bool>,
+    source: Option<String>,
+    cwd: Option<String>,
+) -> Result<util::Captured, String> {
+    execute_tool(
+        app,
+        tools::require_java()?,
+        args,
+        stream,
+        source.unwrap_or_else(|| "java".into()),
+        cwd,
+    )
+    .await
+}
+
+#[tauri::command]
+pub fn get_package_info(state: State<'_, AppState>, id: String) -> Result<PackageInfo, String> {
+    store::load_info(&store::package_dir(&state, &id)?)
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PackageFileAction {
+    IsFile,
+    HasEntries,
+    Remove,
+    Rename,
+}
+
+// Filesystem primitives are confined to a package; workflows and tool arguments live in TS.
+#[tauri::command]
+pub async fn package_file(
+    state: State<'_, AppState>,
+    id: String,
+    action: PackageFileAction,
+    path: String,
+    destination: Option<String>,
+) -> Result<bool, String> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        package_file_impl(&state, &id, action, &path, destination.as_deref())
+    })
+    .await
+    .map_err(join_error)?
+}
+
+fn package_file_impl(
+    state: &AppState,
+    id: &str,
+    action: PackageFileAction,
+    path: &str,
+    destination: Option<&str>,
+) -> Result<bool, String> {
+    let dir = store::package_dir(state, id)?;
+    store::validate_relative_path(path)?;
+    let target = dir.join(path.replace('\\', "/"));
+    if !target.exists() {
+        return Ok(false);
+    }
+    let target = store::safe_join(&dir, &path)?;
+    match action {
+        PackageFileAction::IsFile => Ok(target.is_file()),
+        PackageFileAction::HasEntries => Ok(store::has_entries(&target)),
+        PackageFileAction::Remove => {
+            if target.is_dir() {
+                fs::remove_dir_all(target)
+            } else {
+                fs::remove_file(target)
+            }
+            .map_err(|error| format!("删除文件失败：{error}"))?;
+            Ok(true)
+        }
+        PackageFileAction::Rename => {
+            let destination = destination.ok_or("缺少目标路径")?;
+            store::validate_relative_path(&destination)?;
+            let relative = PathBuf::from(destination.replace('\\', "/"));
+            let parent = relative.parent().and_then(Path::to_str).unwrap_or("");
+            let parent = store::safe_join(&dir, parent)?;
+            let name = relative.file_name().ok_or("目标路径不能为空")?;
+            let destination = parent.join(name);
+            if destination.exists() {
+                return Err("目标路径已存在".into());
+            }
+            fs::rename(target, destination).map_err(|error| format!("移动文件失败：{error}"))?;
+            Ok(true)
+        }
+    }
+}
 const MAX_IMAGE_BYTES: u64 = 10 * 1024 * 1024;
+
+#[cfg(test)]
+mod tests {
+    use super::{package_file_impl, PackageFileAction};
+    use crate::store::AppState;
+    use std::fs;
+
+    #[test]
+    fn package_files_support_staging_and_reject_path_escape() {
+        let root = std::env::temp_dir().join(format!(
+            "mobiletoolbox-files-{}-{}",
+            std::process::id(),
+            crate::util::now_ms()
+        ));
+        let dir = root.join("sample");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("source.tmp.jar"), b"new jar").unwrap();
+        let state = AppState {
+            work_dir: root.clone(),
+            tools_dir: root.clone(),
+        };
+        assert!(package_file_impl(
+            &state,
+            "sample",
+            PackageFileAction::IsFile,
+            "source.tmp.jar",
+            None
+        )
+        .unwrap());
+        assert!(!package_file_impl(
+            &state,
+            "sample",
+            PackageFileAction::IsFile,
+            "missing/file",
+            None
+        )
+        .unwrap());
+        assert!(package_file_impl(
+            &state,
+            "sample",
+            PackageFileAction::Remove,
+            "../outside",
+            None
+        )
+        .is_err());
+        assert!(package_file_impl(
+            &state,
+            "sample",
+            PackageFileAction::Rename,
+            "source.tmp.jar",
+            Some("../outside")
+        )
+        .is_err());
+        assert!(package_file_impl(
+            &state,
+            "sample",
+            PackageFileAction::Rename,
+            "source.tmp.jar",
+            Some("source.jar")
+        )
+        .unwrap());
+        assert_eq!(fs::read(dir.join("source.jar")).unwrap(), b"new jar");
+        assert!(package_file_impl(
+            &state,
+            "sample",
+            PackageFileAction::Remove,
+            "source.jar",
+            None
+        )
+        .unwrap());
+        assert!(!dir.join("source.jar").exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+}
 
 fn join_error(error: impl std::fmt::Display) -> String {
     format!("后台任务失败：{}", error)
@@ -107,42 +332,6 @@ pub async fn clear_packages(app: AppHandle, state: State<'_, AppState>) -> Resul
     })
     .await
     .map_err(join_error)?
-}
-
-#[tauri::command]
-pub async fn decode_package(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    id: String,
-) -> Result<PackageInfo, String> {
-    let state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || apk::decode(&app, &state, &id))
-        .await
-        .map_err(join_error)?
-}
-
-#[tauri::command]
-pub async fn build_jar(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    id: String,
-) -> Result<PackageInfo, String> {
-    let state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || apk::build_jar(&app, &state, &id))
-        .await
-        .map_err(join_error)?
-}
-
-#[tauri::command]
-pub async fn decompile_package(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    id: String,
-) -> Result<PackageInfo, String> {
-    let state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || apk::decompile(&app, &state, &id))
-        .await
-        .map_err(join_error)?
 }
 
 #[tauri::command]
@@ -365,91 +554,4 @@ pub fn open_path(state: State<'_, AppState>, path: String) -> Result<(), String>
     } else {
         util::reveal_path(&target)
     }
-}
-
-#[tauri::command]
-pub async fn adb_devices(
-    state: State<'_, AppState>,
-) -> Result<Vec<crate::model::AndroidDevice>, String> {
-    let state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || adb::devices(&state))
-        .await
-        .map_err(join_error)?
-}
-
-#[tauri::command]
-pub async fn adb_connect(state: State<'_, AppState>, address: String) -> Result<String, String> {
-    let state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || adb::connect(&state, &address))
-        .await
-        .map_err(join_error)?
-}
-
-#[tauri::command]
-pub async fn adb_disconnect(state: State<'_, AppState>, address: String) -> Result<String, String> {
-    let state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || adb::disconnect(&state, &address))
-        .await
-        .map_err(join_error)?
-}
-
-#[tauri::command]
-pub async fn adb_install(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    device_id: String,
-    apk_path: String,
-) -> Result<String, String> {
-    let state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        adb::install(&app, &state, &device_id, &PathBuf::from(apk_path))
-    })
-    .await
-    .map_err(join_error)?
-}
-
-#[tauri::command]
-pub async fn adb_install_package(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    device_id: String,
-    id: String,
-) -> Result<String, String> {
-    let state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        let dir = store::package_dir(&state, &id)?;
-        adb::install(&app, &state, &device_id, &store::apk_path(&dir))
-    })
-    .await
-    .map_err(join_error)?
-}
-
-#[tauri::command]
-pub async fn adb_push_obb(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    device_id: String,
-    file_path: String,
-) -> Result<String, String> {
-    let state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        adb::push_obb(&app, &state, &device_id, &PathBuf::from(file_path))
-    })
-    .await
-    .map_err(join_error)?
-}
-
-#[tauri::command]
-pub async fn adb_uninstall(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    device_id: String,
-    package_name: String,
-) -> Result<String, String> {
-    let state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        adb::uninstall(&app, &state, &device_id, &package_name)
-    })
-    .await
-    .map_err(join_error)?
 }

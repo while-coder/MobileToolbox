@@ -67,18 +67,6 @@ pub struct EnvironmentInfo {
     pub cfr: ToolStatus,
 }
 
-#[derive(Clone, Debug, Default, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AndroidDevice {
-    pub id: String,
-    pub state: String,
-    pub model: Option<String>,
-    pub manufacturer: Option<String>,
-    pub android_release: Option<String>,
-    pub sdk_int: Option<String>,
-    pub product: Option<String>,
-}
-
 #[derive(Clone, Copy, Debug, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum FileKind {

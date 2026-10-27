@@ -1,7 +1,8 @@
 import { computed, ref } from "vue"
 import { confirm, toast } from "@qingfeng346/ui-kit"
-import { localizedLabel, type AndroidDevice, type PackageInfo } from "@mobiletoolbox/protocol"
+import { localizedLabel, type AndroidDevice, type InstalledApp, type PackageInfo } from "@mobiletoolbox/protocol"
 import { native } from "../platform/native"
+import { adb } from "../platform/adb"
 import { baseName, errorText } from "../utils/errors"
 
 export const devices = ref<AndroidDevice[]>([])
@@ -9,6 +10,47 @@ export const selectedDeviceId = ref<string | null>(null)
 export const loading = ref(false)
 export const connecting = ref(false)
 export const busyText = ref("")
+export const installedApps = ref<InstalledApp[]>([])
+export const appsLoading = ref(false)
+export const appsError = ref("")
+let appsRequest = 0
+let appsDeviceId: string | null = null
+
+export function clearInstalledApps(): void {
+  ++appsRequest
+  appsDeviceId = null
+  installedApps.value = []
+  appsLoading.value = false
+  appsError.value = ""
+}
+
+export async function refreshInstalledApps(): Promise<void> {
+  const deviceId = selectedDevice.value?.state === "device" ? selectedDevice.value.id : null
+  if (!native.isTauri || !deviceId) {
+    clearInstalledApps()
+    return
+  }
+  const request = ++appsRequest
+  if (appsDeviceId !== deviceId) installedApps.value = []
+  appsDeviceId = deviceId
+  appsLoading.value = true
+  appsError.value = ""
+  try {
+    const list = await adb.installedApps(deviceId)
+    if (request === appsRequest && selectedDeviceId.value === deviceId) installedApps.value = list
+  } catch (error) {
+    if (request === appsRequest && selectedDeviceId.value === deviceId) {
+      installedApps.value = []
+      appsError.value = errorText(error)
+    }
+  } finally {
+    if (request === appsRequest) appsLoading.value = false
+  }
+}
+
+function refreshAppsAfterChange(deviceId: string): void {
+  if (appsDeviceId === deviceId && selectedDeviceId.value === deviceId) void refreshInstalledApps()
+}
 
 export const selectedDevice = computed(
   () => devices.value.find((device) => device.id === selectedDeviceId.value) ?? null,
@@ -36,7 +78,7 @@ export async function refreshDevices(quiet = false): Promise<void> {
   if (!native.isTauri) return
   loading.value = true
   try {
-    const list = await native.adbDevices()
+    const list = await adb.devices()
     devices.value = list
     const keep = selectedDeviceId.value
     if (!keep || !list.some((device) => device.id === keep)) {
@@ -54,7 +96,7 @@ export async function connectDevice(address: string): Promise<void> {
   if (connecting.value) return
   connecting.value = true
   try {
-    const output = await native.adbConnect(address)
+    const output = await adb.connect(address)
     toast.show("success", output.trim() || `已连接 ${address}`)
     await refreshDevices(true)
   } catch (error) {
@@ -66,7 +108,7 @@ export async function connectDevice(address: string): Promise<void> {
 
 export async function disconnectDevice(address: string): Promise<void> {
   try {
-    const output = await native.adbDisconnect(address)
+    const output = await adb.disconnect(address)
     toast.show("info", output.trim() || `已断开 ${address}`)
     await refreshDevices(true)
   } catch (error) {
@@ -90,10 +132,11 @@ async function runTask<T>(text: string, task: () => Promise<T>): Promise<T | nul
 export async function installApk(deviceId: string, apkPath: string): Promise<boolean> {
   if (!requireOnline(deviceId)) return false
   const output = await runTask(`正在安装 ${baseName(apkPath)}…`, () =>
-    native.adbInstall(deviceId, apkPath),
+    adb.install(deviceId, apkPath),
   )
   if (output === null) return false
   toast.show("success", output.trim() || "安装完成", 5000)
+  refreshAppsAfterChange(deviceId)
   return true
 }
 
@@ -103,12 +146,13 @@ export async function installPaths(deviceId: string, paths: string[]): Promise<v
   let succeeded = 0
   for (const path of paths) {
     const output = await runTask(`正在安装 ${baseName(path)}…`, () =>
-      native.adbInstall(deviceId, path),
+      adb.install(deviceId, path),
     )
     if (output !== null) succeeded += 1
   }
   if (succeeded > 0) {
     toast.show("success", `已安装 ${succeeded}/${paths.length} 个安装包`)
+    refreshAppsAfterChange(deviceId)
   }
 }
 
@@ -116,10 +160,11 @@ export async function installPackage(deviceId: string, pkg: PackageInfo): Promis
   if (!requireOnline(deviceId)) return
   const label = localizedLabel(pkg, typeof navigator === "undefined" ? "zh-CN" : navigator.language)
   const output = await runTask(`正在安装「${label}」…`, () =>
-    native.adbInstallPackage(deviceId, pkg.id),
+    adb.installPackage(deviceId, pkg.id),
   )
   if (output === null) return
   toast.show("success", output.trim() || `「${label}」安装完成`, 5000)
+  refreshAppsAfterChange(deviceId)
 }
 
 export async function pickAndInstall(deviceId: string): Promise<void> {
@@ -135,7 +180,7 @@ export async function pickAndInstall(deviceId: string): Promise<void> {
 export async function pushObb(deviceId: string, filePath: string): Promise<void> {
   if (!requireOnline(deviceId)) return
   const output = await runTask(`正在推送 ${baseName(filePath)}…`, () =>
-    native.adbPushObb(deviceId, filePath),
+    adb.pushObb(deviceId, filePath),
   )
   if (output === null) return
   toast.show("success", output.trim() || "OBB 已推送到设备", 5000)
@@ -152,6 +197,7 @@ export async function pickAndPushObb(deviceId: string): Promise<void> {
 }
 
 export async function uninstallPackage(deviceId: string, packageName: string): Promise<void> {
+  if (busyText.value) return
   if (!requireOnline(deviceId)) return
   const confirmed = await confirm.show({
     title: "卸载应用",
@@ -159,10 +205,11 @@ export async function uninstallPackage(deviceId: string, packageName: string): P
     confirmText: "卸载",
     error: true,
   })
-  if (!confirmed) return
+  if (!confirmed || busyText.value || !requireOnline(deviceId)) return
   const output = await runTask(`正在卸载 ${packageName}…`, () =>
-    native.adbUninstall(deviceId, packageName),
+    adb.uninstall(deviceId, packageName),
   )
   if (output === null) return
   toast.show("success", output.trim() || "已卸载", 5000)
+  refreshAppsAfterChange(deviceId)
 }

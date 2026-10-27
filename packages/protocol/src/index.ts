@@ -115,6 +115,12 @@ export interface AndroidDevice {
   product: string | null;
 }
 
+export interface InstalledApp {
+  packageName: string;
+  appName: string;
+  system: boolean;
+}
+
 export type FileKind = "text" | "image" | "binary";
 
 export interface FileEntry {

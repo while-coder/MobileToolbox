@@ -33,6 +33,7 @@ pub fn command(program: impl AsRef<std::ffi::OsStr>) -> Command {
     cmd
 }
 
+#[derive(Serialize)]
 pub struct Captured {
     pub stdout: String,
     pub stderr: String,
@@ -76,8 +77,8 @@ pub fn run_quiet(source: &str, cmd: &mut Command) -> Result<Captured, String> {
     }
 }
 
-/// 运行长任务并逐行推送到日志面板，返回输出尾部。
-pub fn run_streaming(app: &AppHandle, source: &str, cmd: &mut Command) -> Result<String, String> {
+/// 运行长任务并逐行推送到日志面板，分别返回 stdout 和 stderr。
+pub fn run_streaming(app: &AppHandle, source: &str, cmd: &mut Command) -> Result<Captured, String> {
     cmd.stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = cmd
         .spawn()
@@ -101,16 +102,20 @@ pub fn run_streaming(app: &AppHandle, source: &str, cmd: &mut Command) -> Result
     let err_thread = thread::spawn(move || collect_lines(stderr, err_app, err_source, "stderr"));
 
     let status = child.wait();
-    let out_lines = out_thread.join().unwrap_or_default();
-    let err_lines = err_thread.join().unwrap_or_default();
+    let stdout = out_thread
+        .join()
+        .map_err(|_| "stdout 读取任务失败".to_string())??;
+    let stderr = err_thread
+        .join()
+        .map_err(|_| "stderr 读取任务失败".to_string())??;
 
     match status {
-        Ok(status) if status.success() => Ok(out_lines.join("\n")),
+        Ok(status) if status.success() => Ok(Captured { stdout, stderr }),
         Ok(status) => {
-            let detail = if err_lines.is_empty() {
-                tail(&out_lines.join("\n"), 12)
+            let detail = if stderr.trim().is_empty() {
+                tail(&stdout, 12)
             } else {
-                tail(&err_lines.join("\n"), 12)
+                tail(&stderr, 12)
             };
             Err(format!(
                 "{} 退出码 {}：{}",
@@ -132,29 +137,25 @@ fn collect_lines<R: Read>(
     app: AppHandle,
     source: String,
     stream: &'static str,
-) -> Vec<String> {
+) -> Result<String, String> {
     let mut reader = BufReader::new(reader);
-    let mut tail: Vec<String> = Vec::new();
+    let mut output = String::new();
     let mut buffer = String::new();
     loop {
         buffer.clear();
-        match reader.read_line(&mut buffer) {
-            Ok(0) => break,
-            Ok(_) => {
-                let line = buffer.trim_end_matches(['\r', '\n']).to_string();
-                if line.trim().is_empty() {
-                    continue;
-                }
-                emit_log(&app, &source, stream, &line);
-                tail.push(line);
-                if tail.len() > 300 {
-                    tail.remove(0);
-                }
-            }
-            Err(_) => break,
+        let count = reader
+            .read_line(&mut buffer)
+            .map_err(|error| format!("读取 {source} 输出失败：{error}"))?;
+        if count == 0 {
+            break;
+        }
+        output.push_str(&buffer);
+        let line = buffer.trim_end_matches(['\r', '\n']);
+        if !line.trim().is_empty() {
+            emit_log(&app, &source, stream, line);
         }
     }
-    tail
+    Ok(output)
 }
 
 fn tail(text: &str, lines: usize) -> String {

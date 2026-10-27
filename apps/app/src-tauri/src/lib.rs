@@ -1,4 +1,3 @@
-mod adb;
 mod apk;
 mod commands;
 mod model;
@@ -81,13 +80,15 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_environment,
+            commands::runtime_paths,
+            commands::adb_command,
+            commands::java_command,
+            commands::package_file,
+            commands::get_package_info,
             commands::list_packages,
             commands::import_packages,
             commands::remove_package,
             commands::clear_packages,
-            commands::decode_package,
-            commands::build_jar,
-            commands::decompile_package,
             commands::get_package_icon,
             commands::list_package_dir,
             commands::read_package_text,
@@ -95,13 +96,6 @@ pub fn run() {
             commands::open_package_folder,
             commands::reveal_package,
             commands::open_path,
-            commands::adb_devices,
-            commands::adb_connect,
-            commands::adb_disconnect,
-            commands::adb_install,
-            commands::adb_install_package,
-            commands::adb_push_obb,
-            commands::adb_uninstall,
         ])
         .run(tauri::generate_context!())
         .expect("MobileToolbox 启动失败");

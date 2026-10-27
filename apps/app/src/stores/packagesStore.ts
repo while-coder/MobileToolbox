@@ -2,8 +2,9 @@ import { computed, ref } from "vue"
 import { confirm, toast } from "@qingfeng346/ui-kit"
 import type { PackageInfo, PackageStage } from "@mobiletoolbox/protocol"
 import { native } from "../platform/native"
+import * as packageCommands from "../platform/packageCommands"
 import { errorText } from "../utils/errors"
-import { activeView, logLocal } from "./appStore"
+import { activeView, handleProgress, logLocal } from "./appStore"
 
 export const packages = ref<PackageInfo[]>([])
 export const selectedId = ref<string | null>(null)
@@ -143,7 +144,7 @@ export async function decodePackage(pkg: PackageInfo): Promise<void> {
   if (busy.value[pkg.id]) return
   setBusy(pkg.id, "decoding")
   try {
-    const updated = await native.decodePackage(pkg.id)
+    const updated = await packageCommands.decodePackage(pkg.id, handleProgress)
     upsert(updated)
     toast.show("success", `「${updated.appName}」资源已解包`)
   } catch (error) {
@@ -157,7 +158,7 @@ export async function buildJar(pkg: PackageInfo): Promise<void> {
   if (busy.value[pkg.id]) return
   setBusy(pkg.id, "jar")
   try {
-    const updated = await native.buildJar(pkg.id)
+    const updated = await packageCommands.buildJar(pkg.id, handleProgress)
     upsert(updated)
     toast.show("success", `已生成 source.jar`)
   } catch (error) {
@@ -171,7 +172,7 @@ export async function decompilePackage(pkg: PackageInfo): Promise<void> {
   if (busy.value[pkg.id]) return
   setBusy(pkg.id, "decompiling")
   try {
-    const updated = await native.decompilePackage(pkg.id)
+    const updated = await packageCommands.decompilePackage(pkg.id, handleProgress)
     upsert(updated)
     toast.show("success", `「${updated.appName}」Java 源码已就绪`)
   } catch (error) {
