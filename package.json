@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "description": "MobileToolbox - mobile app and device inspector desktop app",
-  "packageManager": "pnpm@10.30.3",
+  "packageManager": "pnpm@10.33.0",
   "scripts": {
     "test:commands": "node --test scripts/test-commands.cjs",
     "build:android-tools": "node scripts/build-android-tools.js",
