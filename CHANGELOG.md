@@ -11,9 +11,7 @@
 - 新增 GitHub Actions 发布流程：构建 Windows / macOS / Linux 安装包并发布 updater 清单
 - 新增 `pnpm release`、`pnpm sync:versions` 发版脚本
 
-## 0.1.0
-
-2026-10-26
+## 0.0.1
 
 首个版本。
 
