@@ -1,6 +1,6 @@
 [package]
 name = "mobiletoolbox"
-version = "0.1.0"
+version = "0.0.1"
 description = "MobileToolbox - 移动应用与设备工具箱"
 authors = ["whilecode"]
 edition = "2021"
