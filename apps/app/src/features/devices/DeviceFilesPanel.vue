@@ -6,8 +6,19 @@ import { adb, normalizeDevicePath } from "../../platform/adb"
 import { errorText } from "../../utils/errors"
 import { log } from "../../log"
 
-const props = defineProps<{ deviceId: string | null }>()
-const path = ref("/")
+const props = defineProps<{ deviceId: string | null; initialPath?: string }>()
+const sharedStorage = "/storage/emulated/0"
+const commonDirectories = [
+  { label: "共享存储", path: sharedStorage },
+  { label: "下载", path: `${sharedStorage}/Download` },
+  { label: "文档", path: `${sharedStorage}/Documents` },
+  { label: "相机", path: `${sharedStorage}/DCIM` },
+  { label: "图片", path: `${sharedStorage}/Pictures` },
+  { label: "视频", path: `${sharedStorage}/Movies` },
+  { label: "音乐", path: `${sharedStorage}/Music` },
+  { label: "ADB 临时目录", path: "/data/local/tmp" },
+]
+const path = ref(sharedStorage)
 const inputPath = ref(path.value)
 const entries = ref<DeviceFileEntry[]>([])
 const loading = ref(false)
@@ -32,7 +43,10 @@ async function browse(target: string): Promise<void> {
   } catch (cause) {
     if (token !== request) return
     entries.value = []
-    error.value = errorText(cause)
+    const detail = errorText(cause)
+    error.value = /no such file|not found/i.test(detail)
+      ? `目录不存在：${target}。设备可能尚未创建此目录。`
+      : /permission denied/i.test(detail) ? `无权访问目录：${target}` : detail
     log.error("设备文件", error.value)
   } finally {
     if (token === request) loading.value = false
@@ -41,19 +55,24 @@ async function browse(target: string): Promise<void> {
 function open(entry: DeviceFileEntry): void {
   if (entry.directory) void browse(`${path.value}/${entry.name}`)
 }
-watch(() => props.deviceId, () => { path.value = "/"; inputPath.value = path.value; keyword.value = ""; void browse(path.value) }, { immediate: true })
+watch([() => props.deviceId, () => props.initialPath], () => {
+  path.value = props.initialPath || sharedStorage
+  inputPath.value = path.value
+  keyword.value = ""
+  void browse(path.value)
+}, { immediate: true })
 </script>
 
 <template>
   <section class="device-files" aria-label="Android 设备文件管理">
     <div class="files-toolbar">
       <SButton size="small" :disabled="loading || !deviceId || path === '/'" @click="browse(`${path}/..`)"><ArrowUp :size="14" />上级</SButton>
-      <SInput v-model:value="inputPath" class="path-input" size="small" aria-label="设备目录路径" placeholder="/sdcard" spellcheck="false" @keydown.enter.prevent="browse(inputPath)" />
+      <SInput v-model:value="inputPath" class="path-input" size="small" aria-label="设备目录路径" :placeholder="sharedStorage" spellcheck="false" @keydown.enter.prevent="browse(inputPath)" />
       <SButton size="small" :disabled="loading || !deviceId" @click="browse(inputPath)">转到</SButton>
       <SButton size="small" :loading="loading" :disabled="!deviceId" @click="browse(path)"><RefreshCw :size="13" />刷新</SButton>
     </div>
-    <div class="files-toolbar">
-      <SButton v-for="target in ['/sdcard', '/sdcard/Download', '/sdcard/DCIM', '/']" :key="target" size="small" :disabled="loading || !deviceId" @click="browse(target)">{{ target === '/' ? '根目录' : target.split('/').pop() }}</SButton>
+    <div class="files-toolbar files-shortcuts">
+      <SButton v-for="target in commonDirectories" :key="target.path" size="small" :title="target.path" :disabled="loading || !deviceId" @click="browse(target.path)">{{ target.label }}</SButton>
       <SInput v-model:value="keyword" class="files-search" size="small" clearable placeholder="筛选文件名…" aria-label="筛选设备文件" />
     </div>
     <SAlert v-if="error" type="error" class="files-error">{{ error }}</SAlert>
@@ -77,6 +96,7 @@ watch(() => props.deviceId, () => { path.value = "/"; inputPath.value = path.val
 <style scoped>
 .device-files { display: flex; height: 100%; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; border: 1px solid var(--apk-border); border-radius: var(--apk-radius); background: var(--apk-panel-soft); }
 .files-toolbar { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--apk-border); }
+.files-shortcuts { flex-wrap: wrap; }
 .path-input { flex: 1; min-width: 0; }
 .files-search { margin-left: auto; width: 220px; min-width: 100px; }
 .files-error { flex: 0 0 auto; margin: 10px 12px; }

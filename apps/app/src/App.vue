@@ -429,8 +429,8 @@ onBeforeUnmount(() => {
           <template #logcat>
             <LogcatPanel :device-id="selectedDevice?.state === 'device' ? selectedDevice.id : null" />
           </template>
-          <template #files>
-            <DeviceFilesPanel :device-id="selectedDevice?.state === 'device' ? selectedDevice.id : null" />
+          <template #files="{ path }">
+            <DeviceFilesPanel :device-id="selectedDevice?.state === 'device' ? selectedDevice.id : null" :initial-path="path" />
           </template>
         </DevicePanel>
       </template>

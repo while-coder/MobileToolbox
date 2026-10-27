@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import ResizeHandle from "./ResizeHandle.vue"
-import { computed, ref, watch } from "vue"
+import { computed, reactive, ref, watch } from "vue"
 import {
   Cable,
   FolderUp,
+  FolderOpen,
   PackageOpen,
   PlugZap,
   RefreshCw,
@@ -44,6 +45,27 @@ const address = ref("")
 const libraryId = ref<string>("")
 const appQuery = ref("")
 const detailTab = ref<"apps" | "logcat" | "files">("apps")
+const appDirectory = ref("/storage/emulated/0")
+const directoryMenu = reactive({ show: false, x: 0, y: 0, packageName: "" })
+const directoryOptions = [
+  { label: "共享存储目录（Android/data）", value: "external" },
+  { label: "内部数据目录（data/data）", value: "internal" },
+]
+function showAppDirectories(packageName: string, event: MouseEvent): void {
+  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  directoryMenu.packageName = packageName
+  directoryMenu.x = Math.max(4, Math.min(rect.left, window.innerWidth - 280))
+  directoryMenu.y = rect.bottom + 4
+  directoryMenu.show = true
+}
+function openAppDirectory(location: string): void {
+  directoryMenu.show = false
+  if (location !== "external" && location !== "internal") return
+  appDirectory.value = location === "external"
+    ? `/storage/emulated/0/Android/data/${directoryMenu.packageName}`
+    : `/data/data/${directoryMenu.packageName}`
+  detailTab.value = "files"
+}
 const appFilter = ref<"third-party" | "system" | "all">("third-party")
 const appFilters = [
   { id: "third-party" as const, label: "第三方应用" },
@@ -57,7 +79,11 @@ const filteredApps = computed(() => {
     (!keyword || app.packageName.toLowerCase().includes(keyword) || app.appName.toLowerCase().includes(keyword)),
   )
 })
-watch(() => props.selectedId, () => { appQuery.value = "" })
+watch(() => props.selectedId, () => {
+  appQuery.value = ""
+  appDirectory.value = "/storage/emulated/0"
+  directoryMenu.show = false
+})
 
 const quickTargets = [
   { label: "MuMu 模拟器", address: "127.0.0.1:7555" },
@@ -236,7 +262,7 @@ function installFromLibrary(): void {
           <button type="button" :class="{ active: detailTab === 'files' }" :aria-pressed="detailTab === 'files'" @click="detailTab = 'files'">文件管理</button>
         </div>
         <div v-if="detailTab === 'logcat'" class="device-logcat"><slot name="logcat" /></div>
-        <div v-else-if="detailTab === 'files'" class="device-files"><slot name="files" /></div>
+        <div v-else-if="detailTab === 'files'" class="device-files"><slot name="files" :path="appDirectory" /></div>
         <div v-else class="device-apps">
           <div class="action-grid">
             <div class="action-card">
@@ -300,6 +326,9 @@ function installFromLibrary(): void {
                   <span class="app-package apk-mono" :title="app.packageName">{{ app.packageName }}</span>
                 </div>
                 <STag size="small" :bordered="false">{{ app.system ? '系统' : '第三方' }}</STag>
+                <SButton size="small" :disabled="!canAct || busy" :title="`打开 ${app.packageName} 的应用目录`" @click="showAppDirectories(app.packageName, $event)">
+                  <FolderOpen :size="13" />打开应用目录
+                </SButton>
                 <SButton size="small" type="error" tertiary :disabled="busy || app.system"
                   :title="app.system ? '系统应用暂不提供卸载' : `卸载 ${app.packageName}`"
                   @click="emit('uninstall', app.packageName)">
@@ -326,6 +355,8 @@ function installFromLibrary(): void {
         <p>支持 USB 真机与常见 Android 模拟器，连接后可直接安装安装包库中的 APK。</p>
       </div>
     </section>
+    <SDropdown :show="directoryMenu.show" :x="directoryMenu.x" :y="directoryMenu.y" :options="directoryOptions"
+      :on-clickoutside="() => { directoryMenu.show = false }" @select="openAppDirectory" />
   </div>
 </template>
 
